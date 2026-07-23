@@ -1,0 +1,21 @@
+# Dependencies (dev tooling only; the script itself has none)
+node_modules/
+
+# npm/yarn logs and caches
+npm-debug.log*
+yarn-error.log*
+.npm/
+
+# Editor and IDE files
+.vscode/
+.idea/
+*.sublime-*
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local scratch files (anything you want to keep out of commits)
+*.local.*
+scratch/
