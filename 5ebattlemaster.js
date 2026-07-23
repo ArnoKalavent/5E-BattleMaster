@@ -242,30 +242,39 @@ var BattleMaster = BattleMaster || (function() {
 		return;
 	},
 	
-	//Returns a player ID in every case: a non-GM controller if one is listed,
-	//otherwise any listed controller, otherwise an online GM, otherwise any GM.
+	//Returns a player ID in every case, preferring whoever can actually act:
+	//  1. an ONLINE non-GM controller listed on the character (normal play)
+	//  2. an ONLINE GM controller listed on the character (GM co-listed on a
+	//     PC takes over when the player is absent)
+	//  3. an OFFLINE non-GM listed controller (async/play-by-post: the whisper
+	//     still lands in their archive)
+	//  4. any other listed controller
+	//  5. an online GM, then any GM (uncontrolled NPCs, stale controller IDs)
 	findWhoIsControlling = function(character){
         log("Running findWhoIsControlling!");
         var controllerIDs = [];
         if(character){
             //'controlledby' can be "", "all", or a comma-delimited ID list.
             //"" splits to [""], and "all" is not a player ID - filter both out.
+            //Also drop IDs that no longer resolve to a player in this game
+            //(e.g. a player who left), so callers can trust the returned ID.
             controllerIDs = _.filter(character.get('controlledby').split(','), function(id){
-                return id !== '' && id !== 'all';
+                return id !== '' && id !== 'all' && getObj('player', id) !== undefined;
             });
         }
-        var nonGMController = _.find(controllerIDs, function(id){
-            return !playerIsGM(id);
-        });
-        if(nonGMController){
-            log("Found a non-GM controlling player!");
-            return nonGMController;
+        var isOnline = function(id){
+            return getObj('player', id).get('_online') === true;
+        };
+        var pick =
+            _.find(controllerIDs, function(id){ return isOnline(id) && !playerIsGM(id); }) ||
+            _.find(controllerIDs, function(id){ return isOnline(id); }) ||
+            _.find(controllerIDs, function(id){ return !playerIsGM(id); }) ||
+            controllerIDs[0];
+        if(pick){
+            log("Found a controlling player from the character's controller list!");
+            return pick;
         }
-        if(controllerIDs.length > 0){
-            log("All listed controllers are GMs, using the first.");
-            return controllerIDs[0];
-        }
-        //No controllers listed (typical for NPCs): fall back to a GM.
+        //No usable controllers listed (typical for NPCs): fall back to a GM.
         //playerIsGM takes a player ID, so pass p.id, not the player object.
         log("No players in the controlling list! Falling back to a GM.");
         var onlineGM = _.find(findObjs({_type: "player", _online: true}), function(p){
