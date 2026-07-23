@@ -117,10 +117,13 @@ var BattleMaster = BattleMaster || (function() {
         this.iMoveSpeedTotal = token.get('bar1_max');
         this.iMoveSpeedRemaining = token.get('bar1_value');
         this.name = token.get('name');
-        this.ac = getAttrByName(token.get('represents'),'npcd_ac');
-        if(this.ac === "" || this.ac === undefined){
-            log('Couldn\'t find npcd_ac, looking for just ac')
-            this.ac = getAttrByName(token.get('represents'),'ac');
+        this.ac = undefined;
+        if(token.get('represents')){
+            this.ac = getAttrByName(token.get('represents'),'npcd_ac');
+            if(this.ac === "" || this.ac === undefined){
+                log('Couldn\'t find npcd_ac, looking for just ac')
+                this.ac = getAttrByName(token.get('represents'),'ac');
+            }
         }
         this.get = function(attribute){
             return token.get(attribute);
@@ -228,6 +231,9 @@ var BattleMaster = BattleMaster || (function() {
         promptButtonArray("Move the target to where you would like to attack", ["Target selected"], ["selectedTarget"], currentPlayerDisplayName);
     },
     
+    //Returns the Graphic whose turn it is, or undefined when there is no
+    //valid token turn: empty tracker, a custom entry (round counter etc.) on
+    //top, or a top entry whose token has been deleted from the page.
     findCurrentTurnToken = function(turnorder) {
         log("Finding current turn token!");
 		if (!turnorder) 
@@ -236,10 +242,21 @@ var BattleMaster = BattleMaster || (function() {
 			{return undefined;}
 		if (typeof(turnorder) === 'string') 
 			{turnorder = JSON.parse(turnorder);}
-		if (turnorder && turnorder.length > 0 && turnorder[0].id !== -1)
-            {return getObj('graphic',turnorder[0].id);}
+		if (!turnorder || turnorder.length === 0)
+			{return undefined;}
+		//Custom turn-order items have id "-1" - a STRING per the current API
+		//docs. Check the legacy numeric -1 too, defensively.
+		if (turnorder[0].id === "-1" || turnorder[0].id === -1){
+			log("Top of the turn order is a custom entry, not a token.");
+			return undefined;
+		}
+		var currentToken = getObj('graphic', turnorder[0].id);
+		if (!currentToken){
+			log("Top turn order entry doesn't resolve to a token (deleted from page?).");
+			return undefined;
+		}
         log("Found current turn token!");
-		return;
+		return currentToken;
 	},
 	
 	//Returns a player ID in every case, preferring whoever can actually act:
@@ -300,8 +317,12 @@ var BattleMaster = BattleMaster || (function() {
         var reticleToken = getObj("graphic",reticleTokenId);
         if(reticleToken){
             log("Reticle token isn't null!");
-            _.each(JSON.parse(Campaign().get('turnorder')), function(token){
-                token = getObj('graphic', token.id);
+            _.each(JSON.parse(Campaign().get('turnorder')), function(entry){
+                //Skip custom entries (id "-1") and deleted tokens - only real
+                //tokens can be targeted.
+                if(entry.id === "-1" || entry.id === -1){ return; }
+                var token = getObj('graphic', entry.id);
+                if(!token){ return; }
                 log("Testing token " + token.id);
                 log("Token coords: (" + token.get('left') + ", " + token.get('top'));
                 log("Reticle coords: (" + reticleToken.get('left') + ", " + reticleToken.get('top'));
@@ -465,12 +486,25 @@ var BattleMaster = BattleMaster || (function() {
         var turnorder;
         //Find all the information on whose turn it is
         log("Turnorder: " + Campaign().get('turnorder'));
-        currentTurnToken = new tokenWrapper(findCurrentTurnToken(Campaign().get('turnorder')));
+        var currentTurnGraphic = findCurrentTurnToken(Campaign().get('turnorder'));
+        if(!currentTurnGraphic){
+            log("No token at the top of the turn order (custom entry, empty tracker, or deleted token). Skipping turn prompts.");
+            return;
+        }
+        currentTurnToken = new tokenWrapper(currentTurnGraphic);
         log("CurrentTurnToken: " + JSON.stringify(currentTurnToken));
         currentTurnCharacter = getObj('character',currentTurnToken.token.get('represents'));
         log("CurrentTurnCharacter: " + JSON.stringify(currentTurnCharacter));
+        if(!currentTurnCharacter){
+            sendChat('BattleMaster','/w gm Token "' + (currentTurnToken.name || 'unnamed') + '" isn\'t linked to a character sheet, so BattleMaster can\'t run its turn. Set "Represents Character" on the token and re-add it to the tracker.');
+            return;
+        }
         currentTurnPlayer = getObj('player',findWhoIsControlling(currentTurnCharacter));
         log("CurrentTurnPlayer: " + JSON.stringify(currentTurnPlayer));
+        if(!currentTurnPlayer){
+            log("ERROR: couldn't resolve a controlling player for the current turn. Skipping turn prompts.");
+            return;
+        }
         currentPlayerDisplayName = currentTurnPlayer.get('displayname');
         if (!turnorder) 
 			{turnorder = Campaign().get('turnorder');}
@@ -483,7 +517,12 @@ var BattleMaster = BattleMaster || (function() {
         ResetCharacterTurnValues(currentTurnCharacter);
         ResetUnspecificTurnValues();
         _.each(turnorder, function(current){
-            listTokensInEncounter.push(new tokenWrapper(getObj("graphic",current.id)));
+            //Only real, still-existing tokens join the encounter list: skip
+            //custom entries (id "-1") and entries whose token was deleted.
+            if(current.id === "-1" || current.id === -1){ return; }
+            var entryGraphic = getObj("graphic", current.id);
+            if(!entryGraphic){ return; }
+            listTokensInEncounter.push(new tokenWrapper(entryGraphic));
         });
         log('It\'s now ' + currentTurnCharacter.get('name') + '\'s turn!' );
         log('This character is controlled by player ' + currentTurnPlayer.get('displayname'))

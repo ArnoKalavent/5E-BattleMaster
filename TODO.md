@@ -30,9 +30,16 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
       GM. Filters ""/"all"/stale IDs from `controlledby`; always returns a
       valid player *ID* (string); guarded against undefined character.
       Unit-tested (13 cases) + syntax-checked.
-- [ ] **Fix turn-order custom-item check** — custom items use string `"-1"` per
-      current docs; script compares `!== -1` (number). Compare as string; skip or
-      scan past custom items instead of crashing.
+- [x] **Fix turn-order handling** (all three consumer sites, not just one):
+      `findCurrentTurnToken` treats custom entries (string `"-1"`, legacy
+      numeric `-1`), empty trackers, and deleted tokens as "no token turn";
+      `TurnChange` gained a guard chain (no-token turn -> silent skip;
+      unlinked token -> GM whisper + skip; unresolvable player -> log + skip)
+      and filters custom/deleted entries from the encounter list;
+      `findTokenAtTarget` filters the same from targeting. `tokenWrapper` AC
+      lookup guarded for unlinked tokens. Custom entry on TOP = nobody's turn
+      (waits for GM to advance) by design. Unit-tested (10 cases,
+      `tests/turnOrder.test.js`) + syntax-checked.
 - [ ] **Fix `findAllTokensInLine` call site** — passes `(x, y, direction, range)`
       into `(origin, direction, range)`. Line AOEs have never worked.
 - [ ] **Fix `bar1_val` typo** in `ResetTokenTurnValues` (should be `bar1_value`);
@@ -49,8 +56,8 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Check-in test infrastructure: `package.json` (underscore devDependency,
       `npm test`) + `tests/findWhoIsControlling.test.js` (13 cases, extracts
       the function from shipping source via stubs)
-- [ ] Extend the harness pattern to future Phase 1 fixes (turn-order lookup,
-      line-AOE geometry) as each lands
+- [~] Extend the harness pattern to future Phase 1 fixes — turn-order done
+      (`turnOrder.test.js`, chained into `npm test`); line-AOE geometry next
 
 ## Phase 2 — State, config & DeathMarkersPlus removal (V1 scope)
 
