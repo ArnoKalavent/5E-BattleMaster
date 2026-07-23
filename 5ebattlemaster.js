@@ -531,9 +531,11 @@ var BattleMaster = BattleMaster || (function() {
     },
     
     ResetTokenTurnValues = function(currentTurnTokenWrapper){
-        currentTurnTokenWrapper.iMoveSpeedTotal = currentTurnToken.token.get('bar1_max');
+        currentTurnTokenWrapper.iMoveSpeedTotal = currentTurnTokenWrapper.token.get('bar1_max');
         currentTurnTokenWrapper.iMoveSpeedRemaining = currentTurnTokenWrapper.iMoveSpeedTotal;
-        currentTurnTokenWrapper.token.set('bar1_val', currentTurnTokenWrapper.iMoveSpeedRemaining);
+        //'bar1_value' - the old 'bar1_val' was a typo, so remaining movement
+        //was never actually reset between turns.
+        currentTurnTokenWrapper.token.set('bar1_value', currentTurnTokenWrapper.iMoveSpeedRemaining);
         iXStart = currentTurnTokenWrapper.token.get('left');
         iYStart = currentTurnTokenWrapper.token.get('top');
     },
@@ -746,9 +748,11 @@ var BattleMaster = BattleMaster || (function() {
         }       
         var effectType = "beam-"+dmgTypeToFXName(currentlyCastingSpellRoll.dmgTypes[0]);
         log("Spawning fx: " + effectType);
-        var startLoc = new location(x+xMod,y+yMod,0), endLoc = new location(x+xMod+xMod, y+yMod+yMod);
+        var startLoc = new location(x+xMod,y+yMod,0), endLoc = new location(x+xMod+xMod, y+yMod+yMod,0);
         spawnFxBetweenPoints(startLoc,endLoc,effectType,getObj('page', Campaign().get('playerpageid')));
-        _.each(findAllTokensInLine(x+xMod,y+yMod,direction,range), spellEffects);
+        //findAllTokensInLine takes (origin location, direction, range) - the
+        //same contract as findAllTokensInCone above.
+        _.each(findAllTokensInLine(new location(x + xMod, y + yMod, 0), direction, range), spellEffects);
     },
 
     spellEffects = function(token){

@@ -23,6 +23,11 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 ## Phase 1 — Critical crash fixes (script unusable in real games without these)
 
+> **Exit criterion:** all four fixes landed + live smoke test in an actual
+> Roll20 game (PC turn, NPC turn, custom tracker entry present, weapon
+> attack, cone AOE, line AOE). README Known Issues updated to match reality
+> as part of Phase 1 close-out.
+
 - [x] **Fix `findWhoIsControlling` GM fallback** — rewritten with
       online-aware preference order: online non-GM controller > online GM
       controller (co-listed GM covers absent players) > offline non-GM
@@ -40,24 +45,27 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
       lookup guarded for unlinked tokens. Custom entry on TOP = nobody's turn
       (waits for GM to advance) by design. Unit-tested (10 cases,
       `tests/turnOrder.test.js`) + syntax-checked.
-- [ ] **Fix `findAllTokensInLine` call site** — passes `(x, y, direction, range)`
-      into `(origin, direction, range)`. Line AOEs have never worked.
-- [ ] **Fix `bar1_val` typo** in `ResetTokenTurnValues` (should be `bar1_value`);
-      movement is never reset between turns.
+- [x] **Fix `findAllTokensInLine` call site** — now passes
+      `(new location(x,y,0), direction, range)`, mirroring the cone call;
+      added missing z to the FX endLoc. Tested: call-site contract (4 cases)
+      + line geometry for all cardinals, a diagonal, off-axis tolerance, and
+      range cutoff (8 cases) in `tests/lineAoe.test.js`.
+- [x] **Fix `bar1_val` typo** in `ResetTokenTurnValues` (`bar1_value`);
+      also switched a stray global reference to the function's own parameter.
+      Tested (3 cases, same file).
 
 ## Phase 1.5 — Repo restructure & test infrastructure
 
-- [ ] Flatten repo: single `5ebattlemaster.js` at root; delete `0.1/` and
-      `0.2/` folders in one commit (git history preserves them; original
-      layout mirrored the Roll20 one-click submission convention, which is
-      not needed in the dev repo)
+- [x] Flatten repo: single `5ebattlemaster.js` at root; `0.1/`/`0.2/`
+      folders deleted (git history preserves them)
 - [ ] Use git **tags** for releases (v0.3.0 when Phase 1 lands); release
       branches only if old lines ever need maintenance
 - [x] Check-in test infrastructure: `package.json` (underscore devDependency,
       `npm test`) + `tests/findWhoIsControlling.test.js` (13 cases, extracts
       the function from shipping source via stubs)
-- [~] Extend the harness pattern to future Phase 1 fixes — turn-order done
-      (`turnOrder.test.js`, chained into `npm test`); line-AOE geometry next
+- [x] Harness pattern extended to all Phase 1 fixes: `npm test` chains
+      `findWhoIsControlling` (13) + `turnOrder` (10) + `lineAoe` (15) = 38
+      cases, all green
 
 ## Phase 2 — State, config & DeathMarkersPlus removal (V1 scope)
 
