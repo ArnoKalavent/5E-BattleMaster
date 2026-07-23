@@ -1,0 +1,12 @@
+{
+  "name": "5e-battlemaster",
+  "version": "0.3.0-dev",
+  "description": "Dev harness for the 5E BattleMaster Roll20 Mod script. The script itself runs in Roll20's sandbox; this package exists only to run tests locally.",
+  "private": true,
+  "scripts": {
+    "test": "node tests/findWhoIsControlling.test.js"
+  },
+  "devDependencies": {
+    "underscore": "^1.13.0"
+  }
+}

@@ -1,0 +1,140 @@
+# 5E BattleMaster Fork — Project TODO
+
+Working roadmap for modernizing the 5E-BattleMaster Roll20 Mod script.
+Target: current Roll20 Mod (API) + **D&D 5E by Roll20 (2014) sheet**.
+Shaped sheet support is dropped; D&D 2024/Beacon is a separate future track.
+
+Status key: `[ ]` open · `[x]` done · `[~]` in progress
+
+---
+
+## Phase 0 — Documentation ✅ COMPLETE
+
+- [x] Audit code for undocumented setup assumptions
+- [x] Draft README "Setup & Requirements" section (`README-setup-section.md`)
+- [x] Merge setup section into fork's README.md (delivered as complete
+      `README.md` — supersedes `README-setup-section.md`)
+- [x] Update README: supported sheet = 2014 only; Shaped marked unsupported /
+      slated for removal; 2024/Beacon marked not supported
+- [x] Document Experimental-vs-Default API server status (V1 runs on Default;
+      Experimental only needed for future Beacon track)
+- [x] Fold verified findings into README (npc_ac known issue, NPC-controller
+      crash workaround, custom tracker entries warning, line-AOE known issue)
+
+## Phase 1 — Critical crash fixes (script unusable in real games without these)
+
+- [x] **Fix `findWhoIsControlling` GM fallback** — rewritten with
+      online-aware preference order: online non-GM controller > online GM
+      controller (co-listed GM covers absent players) > offline non-GM
+      controller (archive whisper) > any listed controller > online GM > any
+      GM. Filters ""/"all"/stale IDs from `controlledby`; always returns a
+      valid player *ID* (string); guarded against undefined character.
+      Unit-tested (13 cases) + syntax-checked.
+- [ ] **Fix turn-order custom-item check** — custom items use string `"-1"` per
+      current docs; script compares `!== -1` (number). Compare as string; skip or
+      scan past custom items instead of crashing.
+- [ ] **Fix `findAllTokensInLine` call site** — passes `(x, y, direction, range)`
+      into `(origin, direction, range)`. Line AOEs have never worked.
+- [ ] **Fix `bar1_val` typo** in `ResetTokenTurnValues` (should be `bar1_value`);
+      movement is never reset between turns.
+
+## Phase 1.5 — Repo restructure & test infrastructure
+
+- [ ] Flatten repo: single `5ebattlemaster.js` at root; delete `0.1/` and
+      `0.2/` folders in one commit (git history preserves them; original
+      layout mirrored the Roll20 one-click submission convention, which is
+      not needed in the dev repo)
+- [ ] Use git **tags** for releases (v0.3.0 when Phase 1 lands); release
+      branches only if old lines ever need maintenance
+- [x] Check-in test infrastructure: `package.json` (underscore devDependency,
+      `npm test`) + `tests/findWhoIsControlling.test.js` (13 cases, extracts
+      the function from shipping source via stubs)
+- [ ] Extend the harness pattern to future Phase 1 fixes (turn-order lookup,
+      line-AOE geometry) as each lands
+
+## Phase 2 — State, config & DeathMarkersPlus removal (V1 scope)
+
+- [ ] **Namespace all state** under `state.BattleMaster = {...}` per current API
+      best practice (root-level keys risk cross-script collisions).
+- [ ] **Fix config truthiness bug** — DMP toggle stored string `"false"` (truthy).
+      Becomes moot once DMP is removed, but apply the lesson: store booleans as
+      booleans in all config handling.
+- [ ] **Remove DeathMarkersPlus entirely** (script no longer exists):
+      - [ ] Delete `Deathmarkers.UpdateDeathMarkers()` calls, the
+            `bDeathMarkersPlusInstalled` state key, and the `DMPConfig` config path
+      - [ ] Replace with native Roll20 status markers via
+            `token.set('status_<marker>', ...)`:
+            - Dead (HP ≤ 0): `dead` marker (the classic red X)
+            - Bloodied (HP ≤ half max): pick default marker — candidates:
+              `half-heart`, `broken-heart`, `skull` (decide before implementing)
+      - [ ] Clear/downgrade markers when healing crosses thresholds (bloodied ↔
+            healthy, dead → alive)
+- [ ] Make marker updates a single helper called from `applyDamage` so V2 can
+      swap implementations cleanly.
+
+## Phase 3 — API signature & asset fixes
+
+- [ ] **`sendPing`** — current signature is `(left, top, page_id, player_id,
+      moveAll)`; script calls `(x, y, null, true)`. Pass
+      `Campaign().get('playerpageid')` and put `true` in `moveAll`. (Note: docs
+      say moveAll currently only centers GMs.)
+- [ ] **`spawnFx` / `spawnFxBetweenPoints`** — script passes a page *object* as
+      the 4th arg; docs want a page ID string, and it's optional with the right
+      default. Drop the 4th argument everywhere.
+- [ ] **Reticle image** — hard-coded `imgsrc` from original author's library
+      violates imgsrc restrictions (must be own-library "thumb" URL with query
+      string). Make it a config value in `state.BattleMaster`, with README
+      instructions for uploading a reticle image and setting the URL.
+
+## Phase 4 — Sheet verification & parser cleanup (2014 sheet)
+
+- [x] **Verify 2014 sheet attributes & templates** (official sheet is
+      closed-source; verified via official Roll20 docs + community wiki refs,
+      2026-07-23):
+      - [x] NPC armor class = **`npc_ac`**. `npcd_*` attributes were removed in
+            sheet v2.0 (~2017) — the script's `npcd_ac` check has been dead for
+            years. → Fix: try `npc_ac`, fall back to `ac` (PCs); drop `npcd_ac`.
+      - [x] Roll templates still current per official docs
+            (help.roll20.net "D&D 5e OGL Roll Templates"): `atkdmg`/`atk`/`dmg`/
+            `simple` for PCs, `npcatk`/`npcaction` for NPCs, with fields `r1`,
+            `r2`, `dmg1`, `dmg1type`, `crit1`, `crit2`, `savedc`, `saveattr`,
+            `savedesc`, `range`, `charname` intact. Parser field names are valid
+            for the 2014 sheet. Combined attack+damage messages still require
+            the sheet's Auto Roll Damage & Crit setting.
+      - [~] Resistances: `npc_immunities`/`npc_resistances`/`npc_vulnerabilities`
+            confirmed as NPC attributes. **Open question:** the 2014 sheet has
+            no structured PC-side damage-resistance attribute — decide how (or
+            whether) to support PC resistances (custom attribute? config? skip
+            and document?).
+- [ ] **Remove Shaped sheet mode** — delete Shaped branches from `rollData`,
+      `applyDamage`, save-DC handling, and the SheetConfig options.
+- [ ] Fix latent `IsWithinRange` bug (`=` vs `===` on empty-string check) before
+      wiring up range enforcement (planned feature).
+- [ ] Replace fragile `indexOf`/`substring` template parsing with a small
+      regex-based field extractor (single place to maintain field names).
+
+## Phase 5 — Modernization & hardening (post-V1 polish)
+
+- [ ] Replace `var`-chain IIFE style incrementally (`const`/`let`, strict mode
+      throughout) — low priority, do opportunistically with each touched function
+- [ ] Guard roll interception: tag/validate expected roll templates so unrelated
+      inline rolls from a prompted player aren't swallowed
+- [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
+- [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
+
+## V2 — Future track
+
+- [ ] **Custom status-marker extension path** — config API letting users map
+      dead/bloodied states to their own token markers (use `token_markers` JSON
+      to validate custom marker tags; fall back to defaults)
+- [ ] D&D 2024 / Beacon support: `getSheetItem`/`setSheetItem` (async),
+      HTML roll parsing (`data-result` attributes), Experimental API server
+      requirement documented
+- [ ] Planned features from original README: range enforcement, movement limits
+      from bar1, ranged-origin AOEs (Fireball), Cube/Cylinder shapes,
+      class-specific actions
+
+---
+
+*Cross-references: `README.md` (Phase 0 deliverable), audit findings in chat
+2026-07-23.*
