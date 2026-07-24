@@ -1,7 +1,8 @@
 var BattleMaster = BattleMaster || (function() {
     'use strict';
     
-    var bInCombat, bIsWaitingOnRoll, bIsWaitingOnResponse, responseCallbackFunction, selectedTokenCallbackFunction,
+    var bInCombat, bStagingInitiative, bIsWaitingOnRoll, bIsWaitingOnResponse, responseCallbackFunction, selectedTokenCallbackFunction,
+    sLastPromptedTurnID, iLastTurnorderLength = 0,
     iXStart, iYStart, iXCurrent, iYCurrent,
     currentPlayerDisplayName, currentTurnPlayer, currentTurnCharacter, currentTurnToken,
     currentlyCastingSpellRoll,
@@ -386,9 +387,16 @@ var BattleMaster = BattleMaster || (function() {
 		switch(args[0]) {
 		    case '!combat':
 		        switch(args[1]){
-		            case 'start': StartCombat(); 
+		            case 'roll':  //"!combat roll initiative"
+		            case 'start': //legacy alias
+		                StageInitiative();
                     break;
-		            case 'stop' : StopCombat(); 
+		            case 'begin': //"!combat begin round 1"
+		                BeginCombat(args.slice(2).join(' '));
+                    break;
+		            case 'end':
+		            case 'stop':  //legacy alias
+		                EndCombat();
                     break;
                     case 'weaponattack': 
                                 promptTarget();
@@ -462,23 +470,57 @@ var BattleMaster = BattleMaster || (function() {
 		}
     },
     
-    StartCombat = function(){
+    //Phase 1 of 3: "!combat roll initiative" - announce combat and enter the
+    //staging phase. Tracker changes are IGNORED while staging, so initiative
+    //rolls landing in the tracker don't fire spurious turn prompts.
+    StageInitiative = function(){
+        bInCombat = false;
+        bStagingInitiative = true;
+        bIsWaitingOnResponse = false;
+        bIsWaitingOnRoll = false;
+        sLastPromptedTurnID = undefined;
+        log('Combat staged - waiting on initiative.');
+        sendChat("BattleMaster", "Roll for initiative!");
+        sendChat("BattleMaster", "/w GM When the tracker is set and sorted, run <b>!combat begin round 1</b>");
+    },
+
+    //Phase 2 of 3: "!combat begin round 1" - turn processing goes live and
+    //the first turn is prompted. Anything after "begin" is echoed to the
+    //table as the announcement (e.g. "round 1").
+    BeginCombat = function(announceLabel){
+        var turnorder = Campaign().get('turnorder');
+        var parsed = turnorder ? JSON.parse(turnorder) : [];
+        var hasTokenEntry = _.some(parsed, function(entry){
+            return entry.id !== "-1" && entry.id !== -1 && getObj('graphic', entry.id) !== undefined;
+        });
+        if(!hasTokenEntry){
+            sendChat("BattleMaster", "/w GM The turn tracker has no combatant tokens yet - roll initiative first, then run !combat begin");
+            return;
+        }
+        bStagingInitiative = false;
         bInCombat = true;
         bIsWaitingOnResponse = false;
-        log('Combat Started!');
-        sendChat("BattleMaster", "/w GM Combat Started!")
-        /*
-        Things this needs to do: 
-        Set a combat bool to true
-        Do all of our fun combat setup things
-        */
+        iLastTurnorderLength = parsed.length;
+        log('Combat begun!');
+        sendChat("BattleMaster", "Combat begins" + (announceLabel ? " - " + announceLabel : "") + "!");
+        TurnChange();
     },
-    
-    StopCombat = function(){
+
+    //Phase 3 of 3: "!combat end" - tear everything down, including any
+    //pending roll interception so stray rolls aren't swallowed after combat.
+    EndCombat = function(){
         bInCombat = false;
+        bStagingInitiative = false;
         bIsWaitingOnResponse = false;
-        log('Combat stopped!');
-        sendChat("BattleMaster", "/w GM Combat Stopped!")
+        bIsWaitingOnRoll = false;
+        sLastPromptedTurnID = undefined;
+        iLastTurnorderLength = 0;
+        listPlayerIDsWaitingOnRollFrom = [];
+        listRollCallbackFunctions = [];
+        listTokensWaitingOnSavingThrowsFrom = [];
+        listTokensInEncounter = [];
+        log('Combat ended!');
+        sendChat("BattleMaster", "/w GM Combat Ended!")
     },
     
     TurnChange = function(){
@@ -486,6 +528,13 @@ var BattleMaster = BattleMaster || (function() {
         var turnorder;
         //Find all the information on whose turn it is
         log("Turnorder: " + Campaign().get('turnorder'));
+        //Record the top entry we're processing so the change listener can
+        //suppress duplicate events for the same turn (covers BeginCombat's
+        //direct call too). Recorded even when we skip below, so an unlinked
+        //token or custom entry doesn't re-warn on every tracker touch.
+        var rawTurnorderForGuard = Campaign().get('turnorder');
+        var parsedForGuard = rawTurnorderForGuard ? JSON.parse(rawTurnorderForGuard) : [];
+        sLastPromptedTurnID = parsedForGuard.length > 0 ? parsedForGuard[0].id : undefined;
         var currentTurnGraphic = findCurrentTurnToken(Campaign().get('turnorder'));
         if(!currentTurnGraphic){
             log("No token at the top of the turn order (custom entry, empty tracker, or deleted token). Skipping turn prompts.");
@@ -1195,9 +1244,28 @@ var BattleMaster = BattleMaster || (function() {
         buildTemplates();
         on('chat:message', HandleInput);
         on('change:campaign:turnorder', function(){
-            if(bInCombat){
-                TurnChange();
+            //Staging (initiative gathering) and inactive: ignore all changes.
+            if(!bInCombat){
+                return;
             }
+            var turnorder = Campaign().get('turnorder');
+            var parsed = turnorder ? JSON.parse(turnorder) : [];
+            //Growth guard: gaining entries means an addition (initiative
+            //roll, mid-fight summon), never a turn advance - a real advance
+            //is a rotation that keeps the length constant. Never prompt on
+            //growth; the new arrival gets its turn when the tracker rotates.
+            if(parsed.length > iLastTurnorderLength){
+                iLastTurnorderLength = parsed.length;
+                return;
+            }
+            iLastTurnorderLength = parsed.length;
+            //Top-unchanged guard: re-sorts, edits, and removals below the
+            //top slot shouldn't re-prompt the same combatant.
+            var topID = parsed.length > 0 ? parsed[0].id : undefined;
+            if(topID !== undefined && topID === sLastPromptedTurnID){
+                return;
+            }
+            TurnChange();
         });
     };
     return {

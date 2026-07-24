@@ -23,6 +23,18 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 ## Phase 1 — Critical crash fixes (script unusable in real games without these)
 
+- [x] **Fix initiative-roll prompt spam** (found in live smoke test):
+      `!combat start` treated every tracker change as a turn change, so
+      initiative rolls landing in an empty tracker whispered spurious turn
+      prompts and armed roll interception. Replaced with a three-phase flow:
+      `!combat roll initiative` (staging - tracker changes ignored) ->
+      `!combat begin round 1` (goes live, refuses if tracker has no tokens,
+      echoes the label) -> `!combat end` (full teardown incl. pending roll
+      queues). `start`/`stop` kept as legacy aliases. Turn listener gained a
+      growth guard (adds are never advances) and a top-unchanged guard (no
+      duplicate prompts on re-sorts). Tested (25 cases,
+      `tests/combatFlow.test.js`, incl. full bug-scenario simulation).
+
 > **Exit criterion:** all four fixes landed + live smoke test in an actual
 > Roll20 game (PC turn, NPC turn, custom tracker entry present, weapon
 > attack, cone AOE, line AOE). README Known Issues updated to match reality
