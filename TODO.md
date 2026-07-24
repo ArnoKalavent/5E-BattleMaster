@@ -101,17 +101,25 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 ## Phase 3 — API signature & asset fixes
 
-- [ ] **`sendPing`** — current signature is `(left, top, page_id, player_id,
-      moveAll)`; script calls `(x, y, null, true)`. Pass
-      `Campaign().get('playerpageid')` and put `true` in `moveAll`. (Note: docs
-      say moveAll currently only centers GMs.)
+- [x] **`sendPing`** — fixed at its only call site (in `promptTarget`):
+      now `(x, y, playerpageid, null, true)` per current signature. Covered
+      by a reticle test asserting the argument layout.
 - [ ] **`spawnFx` / `spawnFxBetweenPoints`** — script passes a page *object* as
       the 4th arg; docs want a page ID string, and it's optional with the right
       default. Drop the 4th argument everywhere.
-- [ ] **Reticle image** — hard-coded `imgsrc` from original author's library
-      violates imgsrc restrictions (must be own-library "thumb" URL with query
-      string). Make it a config value in `state.BattleMaster`, with README
-      instructions for uploading a reticle image and setting the URL.
+- [x] **Reticle image** (pulled forward - blocked live testing; the original
+      author's library URL is now access-denied, `createObj` returned
+      undefined, and `.id` on it crashed the whole sandbox):
+      - `!combat reticleconfig` captures the image from the GM's selected
+        token (or a URL arg), normalizes med/original/max -> thumb preserving
+        the query string, stores in `state.BattleMaster.reticleImgSrc`
+      - `promptTarget` hard-guarded: unconfigured -> instructive GM whisper;
+        createObj rejection -> GM whisper explaining own-library requirement;
+        never dereferences a failed createObj; returns success boolean
+      - attack cases + retry paths only arm their callbacks when the reticle
+        actually spawned
+      - `state.BattleMaster` namespace initialized on ready (Phase 2 partial)
+      - Tested (20 cases, `tests/reticle.test.js`, incl. the exact crash)
 
 ## Phase 4 — Sheet verification & parser cleanup (2014 sheet)
 

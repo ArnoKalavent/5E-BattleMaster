@@ -216,20 +216,63 @@ var BattleMaster = BattleMaster || (function() {
         sendChat('BattleMaster', stringToSend);
     },
 
+    //Spawns the targeting reticle. Returns true on success. The image MUST
+    //come from the game creator's own Roll20 library (as a "thumb" URL) or
+    //createObj rejects it - which is why the imgsrc is configured per-game
+    //via "!combat reticleconfig" rather than hard-coded.
     promptTarget = function(){
-        reticleTokenId = createObj("graphic", {
+        var imgsrc = state.BattleMaster && state.BattleMaster.reticleImgSrc;
+        if(!imgsrc){
+            sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" The targeting reticle isn\'t set up yet - the GM needs to configure it first.');
+            sendChat("BattleMaster", "/w GM No reticle image is configured. Upload any small image to your Roll20 library, drag it onto the page, select it, and run <b>!combat reticleconfig</b>. (The token can be deleted afterward.)");
+            return false;
+        }
+        var reticle = createObj("graphic", {
             controlledby: (currentTurnPlayer.id),
             _pageid: Campaign().get('playerpageid'),
             left: (currentTurnToken.token.get('left')),
             top: (currentTurnToken.token.get('top') - distanceToPixels(5)),
             layer: "objects",
-            imgsrc: "https://s3.amazonaws.com/files.d20.io/images/35946928/hC9eLBaOaso0aa9kldO9Jg/thumb.png?1500001934",
+            imgsrc: imgsrc,
             width: distanceToPixels(5),
             height: distanceToPixels(5),
-        }).id;
-        sendPing(currentTurnToken.token.get('left'), currentTurnToken.token.get('top')- distanceToPixels(5), null, true);
+        });
+        if(!reticle){
+            //Never dereference a failed createObj - that crashes the whole
+            //API sandbox and wipes all script state.
+            sendChat("BattleMaster", "/w GM Reticle creation failed. The configured image was rejected by Roll20 - it must be an image uploaded to YOUR library (not marketplace/external). Re-run <b>!combat reticleconfig</b> with a library-image token selected.");
+            return false;
+        }
+        reticleTokenId = reticle.id;
+        sendPing(currentTurnToken.token.get('left'), currentTurnToken.token.get('top') - distanceToPixels(5), Campaign().get('playerpageid'), null, true);
         log("Reticle token ID: " + reticleTokenId);
         promptButtonArray("Move the target to where you would like to attack", ["Target selected"], ["selectedTarget"], currentPlayerDisplayName);
+        return true;
+    },
+
+    //"!combat reticleconfig" - captures the reticle image from the GM's
+    //selected token (preferred, no URL wrangling) or from a pasted URL.
+    //Normalizes any library image size (med/original/max) to the "thumb"
+    //size the API requires, preserving the query string.
+    ConfigureReticle = function(msg, urlArg){
+        var imgsrc;
+        if(msg.selected && msg.selected.length > 0){
+            var selectedToken = getObj('graphic', msg.selected[0]._id);
+            if(selectedToken){
+                imgsrc = selectedToken.get('imgsrc');
+            }
+        }
+        if(!imgsrc && urlArg){
+            imgsrc = urlArg;
+        }
+        if(!imgsrc){
+            sendChat("BattleMaster", "/w GM To set the reticle image: upload an image to your Roll20 library, drag it onto the page, select that token, and run <b>!combat reticleconfig</b> again.");
+            return;
+        }
+        imgsrc = imgsrc.replace(/\/(med|original|max|min)\.(png|jpg|jpeg|gif|webp)/, '/thumb.$2');
+        state.BattleMaster = state.BattleMaster || {};
+        state.BattleMaster.reticleImgSrc = imgsrc;
+        sendChat("BattleMaster", "/w GM Reticle image saved" + (imgsrc.indexOf('/thumb.') === -1 ? " - WARNING: the URL doesn't look like a library thumb image, so reticle creation may still fail. If it does, re-run with a token whose image came from your own library." : "!"));
     },
     
     //Returns the Graphic whose turn it is, or undefined when there is no
@@ -399,12 +442,14 @@ var BattleMaster = BattleMaster || (function() {
 		                EndCombat();
                     break;
                     case 'weaponattack': 
-                                promptTarget();
-                                selectedTokenCallbackFunction = WeaponAttack;
+                                if(promptTarget()){
+                                    selectedTokenCallbackFunction = WeaponAttack;
+                                }
                     break;
                     case 'directspell': 
-                                promptTarget();
-                                selectedTokenCallbackFunction = DirectSpellAttack; 
+                                if(promptTarget()){
+                                    selectedTokenCallbackFunction = DirectSpellAttack;
+                                }
                     break;
 		            case 'move': 
                     break;
@@ -432,6 +477,9 @@ var BattleMaster = BattleMaster || (function() {
                     break;
                     case 'tokenfromlist':
                         target = listSelectableGraphics[args[2]];
+                    break;
+                    case 'reticleconfig':
+                        ConfigureReticle(msg, args[2]);
                     break;
                     case "config":
                         var s = msg.who; 
@@ -629,8 +677,9 @@ var BattleMaster = BattleMaster || (function() {
         else{
             log('Tried to attack with weapon, but no target was selected!');
             sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" No target is selected! Please select a target!');
-            promptTarget();
-            selectedTokenCallbackFunction = WeaponAttack;
+            if(promptTarget()){
+                selectedTokenCallbackFunction = WeaponAttack;
+            }
         }
     },
     
@@ -663,8 +712,9 @@ var BattleMaster = BattleMaster || (function() {
         else{
             log('Tried to attack with direct spell, but no target was selected!');
             sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" No target is selected! Please select a target!');
-            promptTarget();
-            selectedTokenCallbackFunction = DirectSpellAttack;
+            if(promptTarget()){
+                selectedTokenCallbackFunction = DirectSpellAttack;
+            }
         }
     },
 
@@ -1241,6 +1291,7 @@ var BattleMaster = BattleMaster || (function() {
     },
     
     RegisterEventHandlers = function(){
+        state.BattleMaster = state.BattleMaster || {};
         buildTemplates();
         on('chat:message', HandleInput);
         on('change:campaign:turnorder', function(){
