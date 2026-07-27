@@ -37,8 +37,10 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 > **Exit criterion:** all four fixes landed + live smoke test in an actual
 > Roll20 game (PC turn, NPC turn, custom tracker entry present, weapon
-> attack, cone AOE, line AOE). README Known Issues updated to match reality
-> as part of Phase 1 close-out.
+> attack, cone AOE, line AOE).
+> README fully synced with landed fixes as of 2026-07-24 (commands, reticle
+> setup, controller behavior, tracker guards, Known Issues, changelog) —
+> only the live smoke test remains to close Phase 1.
 
 - [x] **Fix `findWhoIsControlling` GM fallback** — rewritten with
       online-aware preference order: online non-GM controller > online GM

@@ -42,7 +42,7 @@ require the Experimental server and will be documented separately.
 
 BattleMaster makes a number of assumptions about how your game is configured.
 If any of these aren't met, the script will fail silently or crash mid-combat,
-so read this section before your first `!combat start`.
+so read this section before your first combat.
 
 ## Prerequisites
 
@@ -86,7 +86,9 @@ Each token in combat must:
    | Bar 2 (blue)  | Temporary HP | — |
    | Bar 3 (red)   | **Current HP** | Max HP |
 
-   All damage is applied to **Bar 3**. Temporary HP in Bar 2 is consumed first.
+   All damage is applied to **Bar 3**. Temporary HP in Bar 2 is consumed
+   first. Bar 1 is reset to its max each turn, but nothing *decrements* it
+   yet — movement tracking is unimplemented (see Move above).
 3. **Have a name** — used in whispers and target-disambiguation prompts.
 4. **Be in the Turn Tracker** before combat starts (see below).
 
@@ -124,20 +126,24 @@ Each token in combat must:
 
 ## Turn Tracker
 
-- Add **all** combatants (PCs and NPCs) to the Turn Tracker and roll
-  initiative *before* running `!combat start`. The script:
-  - fires player prompts whenever the turn order advances,
+- Add **all** combatants (PCs and NPCs) to the Turn Tracker during the
+  `!combat roll initiative` staging phase, then run `!combat begin`. The
+  script:
+  - prompts the top combatant when the tracker **rotates** (adding entries
+    mid-combat — summons, reinforcements — never fires a premature prompt;
+    the newcomer is prompted when their slot reaches the top),
   - only considers tokens **in the turn order** as valid attack targets,
-  - reads the current combatant from the **top slot**. ⚠️ *Known issue:*
-    custom (non-token) tracker entries such as round counters currently crash
-    the script due to a type-mismatch bug — keep them out of the tracker
-    entirely until the Phase 1 fix lands.
+  - safely ignores custom (non-token) entries like round counters, wherever
+    they sit. If a custom entry is in the top slot, it's nobody's turn until
+    the GM advances past it.
+  - Tokens deleted mid-combat are skipped gracefully.
 - Each character's **Can Be Edited & Controlled By** field determines who is
-  whispered prompts and saving-throw requests. ⚠️ *Known issue:* the intended
-  GM fallback for uncontrolled characters is broken — a character with an
-  empty control list (i.e. a typical NPC) currently crashes the turn handler.
-  Until the Phase 1 fix lands, **explicitly assign a controller (e.g. the GM)
-  to every NPC in combat.**
+  whispered prompts and saving-throw requests, preferring whoever can act:
+  an **online** listed player first, then an **online** listed GM (so a GM
+  co-listed on a PC automatically takes over when the player is absent),
+  then an offline listed player (the whisper lands in their archive), then
+  the GM. Characters with no controller at all (typical NPCs) route to the
+  GM. Unlinked tokens are skipped with a GM whisper explaining the fix.
 
 ## AOE Spells
 
@@ -148,8 +154,7 @@ Current limitations:
 
 - Only **self-origin** AOEs work; point-targeted spells (e.g. Fireball) are
   not yet handled. `Cube` and `Cylinder` are recognized but not implemented.
-- ⚠️ *Known issue:* Line AOEs are currently broken (argument-order bug; Phase
-  1 fix). Cones and spheres work.
+  Cones, lines, and spheres all work.
 - Cone/line direction is chosen from 8 compass-point buttons.
 - Save DCs and damage come from the caster's roll; each affected token's
   controller is whispered a saving-throw request, and the script consumes
@@ -159,17 +164,23 @@ Current limitations:
 
 Tracked in detail in `TODO.md`. Summary of what bites hardest today:
 
-- NPC turns crash if the character has no assigned controller (Phase 1).
-- Custom Turn Tracker entries crash the current-turn lookup (Phase 1).
-- Line-shaped AOEs never resolve (Phase 1).
-- Remaining movement (Bar 1) is never reset between turns — `bar1_val` typo
-  (Phase 1).
-- NPC AC is read from a removed attribute; comparisons unreliable (Phase 4).
+- **Move does nothing** — the action button is an unimplemented stub.
+- **Stacked tokens break targeting**: when the reticle covers multiple
+  tokens, the "which token?" disambiguation prompt dead-ends — clicking a
+  name records the choice but never resumes the attack. Avoid overlapping
+  targets for now; re-click the action button if you hit it.
+- **Targeting candidates accumulate**: an internal list is never cleared
+  between attacks, so repeated targeting in one session can surface phantom
+  disambiguation prompts.
+- NPC AC is read from a removed attribute (`npcd_ac`); comparisons
+  unreliable for NPCs (Phase 4).
 - The DeathMarkersPlus config toggle must not be touched (Phase 2 removes it).
 - The script consumes the *next* inline roll from a prompted player — avoid
-  unrelated rolls (checks, initiative) while a BattleMaster prompt is pending.
+  unrelated rolls (checks, initiative) while a BattleMaster prompt is
+  pending.
 - Advantage/disadvantage is not resolved — only the first d20 result is used.
-- `sendPing`/`spawnFx` calls use outdated argument forms (Phase 3).
+- `spawnFx` calls pass a page object where the current API wants a page ID
+  string (Phase 3).
 
 ## Planned Functionality
 
@@ -190,6 +201,23 @@ See `TODO.md` for the full phased roadmap. Highlights:
 
 - Documentation overhaul: setup requirements, supported-sheet policy
   (2014-only), known-issues list, phased roadmap (`TODO.md`)
+- Repo restructure: flattened versioned folders; added test infrastructure
+  (`npm test`, 83 unit cases across 5 suites)
+- Fixed: controller resolution rewritten (online-aware preference order,
+  GM takeover for absent players, GM fallback for NPCs, stale-ID filtering)
+- Fixed: turn-order handling — custom entries (round counters), deleted
+  tokens, and unlinked tokens are handled gracefully at all three consumer
+  sites instead of crashing
+- Fixed: line-shaped AOEs (argument-order bug meant they never worked)
+- Fixed: remaining movement reset (`bar1_value` typo)
+- New: three-phase combat flow (`!combat roll initiative` / `begin round N` /
+  `end`) — initiative rolls no longer trigger spurious turn prompts; turn
+  listener guards against additions and re-sorts; `end` clears pending roll
+  interception
+- New: `!combat reticleconfig` — targeting reticle image is configured from
+  a selected token (or URL) and stored in namespaced state; reticle failures
+  whisper instructions instead of crashing the API sandbox
+- Fixed: `sendPing` call updated to the current API signature
 
 ## V0.2 (upstream)
 
