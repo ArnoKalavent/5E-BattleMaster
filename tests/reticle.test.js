@@ -55,6 +55,10 @@ function log(m) { logs.push(String(m)); }
 var chats = [];
 function sendChat(who, what) { chats.push(what); }
 
+function playerIsGM(id) {
+    return id === 'gm1';
+}
+
 var state = {};
 var reticleTokenId;
 var pings = [];
@@ -114,7 +118,7 @@ expect('unconfigured: does not throw', threw, false);
 expect('unconfigured: returns false', result, false);
 expect('unconfigured: never calls createObj', lastCreateArgs, null);
 expect('unconfigured: tells the GM how to fix it',
-    chats.some(function (c) { return c.indexOf('/w GM') === 0 && /reticleconfig/.test(c); }), true);
+    chats.some(function (c) { return c.indexOf('/w GM') === 0 && /!combat set reticle/.test(c); }), true);
 
 // Configured but Roll20 rejects the image: THE sandbox-crash scenario
 state = { BattleMaster: { reticleImgSrc: 'https://files.d20.io/images/1/x/thumb.png?123' } };
@@ -154,7 +158,7 @@ pageTokens.tokX = {
 };
 state = {};
 chats = [];
-ConfigureReticle({ selected: [{ _id: 'tokX' }] }, undefined);
+ConfigureReticle({ playerid: 'gm1', selected: [{ _id: 'tokX' }] }, undefined);
 expect('selected token: saved and normalized med -> thumb',
     state.BattleMaster.reticleImgSrc, 'https://files.d20.io/images/9/abc/thumb.png?555');
 expect('selected token: GM confirmation without warning',
@@ -162,14 +166,14 @@ expect('selected token: GM confirmation without warning',
 
 // URL argument path
 state = {};
-ConfigureReticle({ selected: undefined }, 'https://files.d20.io/images/7/z/original.jpg?42');
+ConfigureReticle({ playerid: 'gm1', selected: undefined }, 'https://files.d20.io/images/7/z/original.jpg?42');
 expect('url arg: saved and normalized original -> thumb',
     state.BattleMaster.reticleImgSrc, 'https://files.d20.io/images/7/z/thumb.jpg?42');
 
 // Suspicious URL still saves, but warns
 state = {};
 chats = [];
-ConfigureReticle({ selected: undefined }, 'https://example.com/notathumb.svg');
+ConfigureReticle({ playerid: 'gm1', selected: undefined }, 'https://example.com/notathumb.svg');
 expect('odd url: saved anyway (GM may know better)',
     state.BattleMaster.reticleImgSrc, 'https://example.com/notathumb.svg');
 expect('odd url: warning issued',
@@ -178,7 +182,7 @@ expect('odd url: warning issued',
 // Nothing provided: instructions, nothing saved
 state = {};
 chats = [];
-ConfigureReticle({ selected: [] }, undefined);
+ConfigureReticle({ playerid: 'gm1', selected: [] }, undefined);
 expect('nothing provided: instructions whispered',
     chats.some(function (c) { return /upload an image/i.test(c); }), true);
 expect('nothing provided: nothing saved',
@@ -187,10 +191,27 @@ expect('nothing provided: nothing saved',
 // Selected token that no longer exists falls through to instructions
 state = {};
 chats = [];
-ConfigureReticle({ selected: [{ _id: 'gone' }] }, undefined);
+ConfigureReticle({ playerid: 'gm1', selected: [{ _id: 'gone' }] }, undefined);
 expect('stale selection: instructions whispered, nothing saved',
     chats.some(function (c) { return /upload an image/i.test(c); }) &&
     (state.BattleMaster === undefined || state.BattleMaster.reticleImgSrc === undefined), true);
+
+// Non-GM with a valid URL: refuse before touching state
+state = {};
+chats = [];
+ConfigureReticle({ playerid: 'player1', who: 'Alice (GM)' }, 'https://files.d20.io/images/7/z/thumb.jpg?42');
+expect('non-GM: nothing saved',
+    state.BattleMaster === undefined || state.BattleMaster.reticleImgSrc === undefined, true);
+expect('non-GM: state untouched', state, {});
+expect('non-GM: one refusal whispered to caller', chats,
+    ['/w "Alice (GM)" Reticle setup is GM-only.']);
+// Non-GM without a display name: use the literal fallback in the refusal
+state = {};
+chats = [];
+ConfigureReticle({ playerid: 'player1' }, 'https://files.d20.io/images/7/z/thumb.jpg?42');
+expect('non-GM without who: state untouched', state, {});
+expect('non-GM without who: refusal whispered to fallback name', chats,
+    ['/w "Player" Reticle setup is GM-only.']);
 
 /* ------------------------------------------------------------------ */
 

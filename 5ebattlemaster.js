@@ -219,12 +219,12 @@ var BattleMaster = BattleMaster || (function() {
     //Spawns the targeting reticle. Returns true on success. The image MUST
     //come from the game creator's own Roll20 library (as a "thumb" URL) or
     //createObj rejects it - which is why the imgsrc is configured per-game
-    //via "!combat reticleconfig" rather than hard-coded.
+    //via "!combat set reticle" rather than hard-coded.
     promptTarget = function(){
         var imgsrc = state.BattleMaster && state.BattleMaster.reticleImgSrc;
         if(!imgsrc){
             sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" The targeting reticle isn\'t set up yet - the GM needs to configure it first.');
-            sendChat("BattleMaster", "/w GM No reticle image is configured. Upload any small image to your Roll20 library, drag it onto the page, select it, and run <b>!combat reticleconfig</b>. (The token can be deleted afterward.)");
+            sendChat("BattleMaster", "/w GM No reticle image is configured. Upload any small image to your Roll20 library, drag it onto the page, select it, and run <b>!combat set reticle</b>. (The token can be deleted afterward.)");
             return false;
         }
         var reticle = createObj("graphic", {
@@ -240,7 +240,7 @@ var BattleMaster = BattleMaster || (function() {
         if(!reticle){
             //Never dereference a failed createObj - that crashes the whole
             //API sandbox and wipes all script state.
-            sendChat("BattleMaster", "/w GM Reticle creation failed. The configured image was rejected by Roll20 - it must be an image uploaded to YOUR library (not marketplace/external). Re-run <b>!combat reticleconfig</b> with a library-image token selected.");
+            sendChat("BattleMaster", "/w GM Reticle creation failed. The configured image was rejected by Roll20 - it must be an image uploaded to YOUR library (not marketplace/external). Re-run <b>!combat set reticle</b> with a library-image token selected.");
             return false;
         }
         reticleTokenId = reticle.id;
@@ -250,11 +250,15 @@ var BattleMaster = BattleMaster || (function() {
         return true;
     },
 
-    //"!combat reticleconfig" - captures the reticle image from the GM's
+    //"!combat set reticle" - captures the reticle image from the GM's
     //selected token (preferred, no URL wrangling) or from a pasted URL.
     //Normalizes any library image size (med/original/max) to the "thumb"
     //size the API requires, preserving the query string.
     ConfigureReticle = function(msg, urlArg){
+        if(playerIsGM(msg && msg.playerid) !== true){
+            sendChat("BattleMaster", '/w "' + ((msg && msg.who) || 'Player') + '" Reticle setup is GM-only.');
+            return;
+        }
         var imgsrc;
         if(msg.selected && msg.selected.length > 0){
             var selectedToken = getObj('graphic', msg.selected[0]._id);
@@ -266,7 +270,7 @@ var BattleMaster = BattleMaster || (function() {
             imgsrc = urlArg;
         }
         if(!imgsrc){
-            sendChat("BattleMaster", "/w GM To set the reticle image: upload an image to your Roll20 library, drag it onto the page, select that token, and run <b>!combat reticleconfig</b> again.");
+            sendChat("BattleMaster", "/w GM To set the reticle image: upload an image to your Roll20 library, drag it onto the page, select that token, and run <b>!combat set reticle</b> again.");
             return;
         }
         imgsrc = imgsrc.replace(/\/(med|original|max|min)\.(png|jpg|jpeg|gif|webp)/, '/thumb.$2');
@@ -478,7 +482,15 @@ var BattleMaster = BattleMaster || (function() {
                     case 'tokenfromlist':
                         target = listSelectableGraphics[args[2]];
                     break;
-                    case 'reticleconfig':
+                    case 'set':
+                        if(args[2] === 'reticle'){
+                            ConfigureReticle(msg, args[3]);
+                        }
+                        else{
+                            sendChat("BattleMaster", '/w "' + (msg.who || 'Player') + '" Usage: !combat set reticle [URL] (or select an image token).');
+                        }
+                    break;
+                    case 'reticleconfig': //legacy alias
                         ConfigureReticle(msg, args[2]);
                     break;
                     case "config":

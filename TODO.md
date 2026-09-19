@@ -41,6 +41,22 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 > README fully synced with landed fixes as of 2026-07-24 (commands, reticle
 > setup, controller behavior, tracker guards, Known Issues, changelog) —
 > only the live smoke test remains to close Phase 1.
+>
+> README follow-up (batched to phase close, 2026-09-19): README:217 documents
+> `!combat reticleconfig`. That still works as a legacy alias, so the README is
+> not wrong, but `!combat set reticle` should be documented as the primary form.
+>
+> **Live smoke test — reticle setup (2026-09-19 changes).** As GM:
+> 1. Select a token whose image is from your own Roll20 library, run
+>    `!combat set reticle` — expect the "saved" whisper.
+> 2. Run `!combat set reticle <library-thumb-url>` with nothing selected —
+>    expect the URL to be saved. This is the `args[3]` path; if the reticle
+>    stops working here, the argument shift is wrong.
+> 3. Run `!combat reticleconfig <library-thumb-url>` — the legacy alias must
+>    still save. This is the `args[2]` path.
+> 4. Run `!combat set` with no second word — expect the usage whisper, no crash.
+> 5. As a NON-GM player, run `!combat set reticle <url>` — expect a refusal
+>    whisper and no change to the configured image.
 
 - [x] **Fix `findWhoIsControlling` GM fallback** — rewritten with
       online-aware preference order: online non-GM controller > online GM
@@ -112,16 +128,24 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] **Reticle image** (pulled forward - blocked live testing; the original
       author's library URL is now access-denied, `createObj` returned
       undefined, and `.id` on it crashed the whole sandbox):
-      - `!combat reticleconfig` captures the image from the GM's selected
+      - `!combat set reticle` captures the image from the GM's selected
         token (or a URL arg), normalizes med/original/max -> thumb preserving
-        the query string, stores in `state.BattleMaster.reticleImgSrc`
+        the query string, stores in `state.BattleMaster.reticleImgSrc`.
+        `!combat reticleconfig` kept as a legacy alias (2026-09-19 rename;
+        note the URL is `args[3]` on the new form, `args[2]` on the alias)
+      - GM-gated (2026-09-19): `ConfigureReticle` refuses any caller for whom
+        `playerIsGM(msg.playerid)` is not true, whispering and returning before
+        `state` is touched. Deliberately NOT a `msg.who` "(GM)" substring check -
+        a player can rename themselves to include it, and a GM speaking as a
+        character has no suffix at all
       - `promptTarget` hard-guarded: unconfigured -> instructive GM whisper;
         createObj rejection -> GM whisper explaining own-library requirement;
         never dereferences a failed createObj; returns success boolean
       - attack cases + retry paths only arm their callbacks when the reticle
         actually spawned
       - `state.BattleMaster` namespace initialized on ready (Phase 2 partial)
-      - Tested (20 cases, `tests/reticle.test.js`, incl. the exact crash)
+      - Tested (25 cases, `tests/reticle.test.js`, incl. the exact crash,
+        the non-GM refusal and the missing-display-name fallback)
 
 ## Phase 4 — Sheet verification & parser cleanup (2014 sheet)
 
