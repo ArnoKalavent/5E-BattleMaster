@@ -19,3 +19,7 @@ desktop.ini
 # Local scratch files (anything you want to keep out of commits)
 *.local.*
 scratch/
+
+# scratch space for the AI seats (task specs, review input, logs)
+.ai/
+*.seats-new

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(bash ~/.claude/seats/codex-task.sh)",
+      "Bash(bash ~/.claude/seats/gemini-review.sh *)",
+      "Bash(bash ~/.claude/seats/codex-review.sh *)",
+      "Bash(npm test *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)"
+    ]
+  }
+}
