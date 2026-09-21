@@ -39,6 +39,20 @@ var BattleMaster = BattleMaster || (function() {
     if(!state.sCharacterSheetType){
         state.sCharacterSheetType = "Shaped";
     }
+    // Inline rolls may be absent, or occupy an array slot without an entry.
+    function safeRollTotal(entry){
+        if(!entry || !entry.results || typeof entry.results.total !== 'number' || !isFinite(entry.results.total)){
+            return undefined;
+        }
+        return entry.results.total;
+    }
+
+    function reportMissingRoll(problem){
+        log("BattleMaster: " + problem);
+        var recipient = currentPlayerDisplayName ? '"' + currentPlayerDisplayName + '"' : 'GM';
+        sendChat("BattleMaster", '/w ' + recipient + ' ' + problem);
+    }
+
     /* OBJECTS */
     function rollData(rollMsg){
         log("Creating RollData object!");
@@ -426,11 +440,13 @@ var BattleMaster = BattleMaster || (function() {
             log("We have recieved a roll result!")
             var playerIDLocation = listPlayerIDsWaitingOnRollFrom.indexOf(msg.playerid);
             var recievedRoll = new rollData(msg);
-            if(playerIDLocation != -1){
-                listRollCallbackFunctions[playerIDLocation](recievedRoll);
+            if(playerIDLocation >= 0){
+                if(listRollCallbackFunctions[playerIDLocation](recievedRoll)){
+                    listPlayerIDsWaitingOnRollFrom.splice(playerIDLocation,1);
+                    listRollCallbackFunctions.splice(playerIDLocation,1);
+                }
             }
-            listPlayerIDsWaitingOnRollFrom.splice(playerIDLocation,1);
-            listRollCallbackFunctions.splice(playerIDLocation,1);
+            bIsWaitingOnRoll = (listPlayerIDsWaitingOnRollFrom.length > 0);
             return;
         }
         args = msg.content.split(/\s+/);//splits the message contents into discrete arguments
@@ -699,20 +715,31 @@ var BattleMaster = BattleMaster || (function() {
     },
     
     WeaponAttackRollCallback = function(rollData){
-        bIsWaitingOnRoll = (listPlayerIDsWaitingOnRollFrom.length != 0); //Check if we're still waiting on another roll
-        if(target.ac <= rollData.d20Rolls[0].results.total){
-            log("Hit! Enemy AC is " + target.ac + " and roll result was " + rollData.d20Rolls[0].results.total);
-            sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Applying damage to ' + target.name);
-            applyDamage(rollData.dmgRolls[0].results.total, rollData.dmgTypes[0], target.token, target.associatedCharacter);
-            if(rollData.dmgRolls.length > 1 && rollData.dmgRolls[1].results.total != 0){
-                applyDamage(rollData.dmgRolls[1].results.total, rollData.dmgTypes[1], target.token, target.associatedCharacter);
+        var toHit = safeRollTotal(rollData.d20Rolls[0]);
+        if(toHit === undefined){
+            reportMissingRoll("The to-hit roll was not present in the message or was unreadable; roll the attack from your character sheet again so it can be adjudicated.");
+            return false;
+        }
+        if(target.ac <= toHit){
+            log("Hit! Enemy AC is " + target.ac + " and roll result was " + toHit);
+            sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Target: ' + target.name);
+            var damage = safeRollTotal(rollData.dmgRolls[0]);
+            var secondaryDamage = safeRollTotal(rollData.dmgRolls[1]);
+            if(damage === undefined || (rollData.dmgRolls.length > 1 && secondaryDamage === undefined)){
+                reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
+                return false;
+            }
+            applyDamage(damage, rollData.dmgTypes[0], target.token, target.associatedCharacter);
+            if(secondaryDamage !== undefined && secondaryDamage != 0){
+                applyDamage(secondaryDamage, rollData.dmgTypes[1], target.token, target.associatedCharacter);
             }
             spawnFx(target.token.get('left'), target.token.get('top'), 'glow-blood',getObj('page', Campaign().get('playerpageid')));
         }
         else{
-            log("Miss! Enemy AC is " + target.ac + " and roll result was " + rollData.d20Rolls[0].results.total);
+            log("Miss! Enemy AC is " + target.ac + " and roll result was " + toHit);
             sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Miss!');
         }
+        return true;
     },
     
     DirectSpellAttack = function(){
@@ -743,8 +770,17 @@ var BattleMaster = BattleMaster || (function() {
     },
     
     DirectSpellRollCallback = function(rollData){
-        bIsWaitingOnRoll = (listPlayerIDsWaitingOnRollFrom.length != 0); //Check if we're still waiting on another roll
         if(rollData.bRequiresSavingThrow){
+            var spellDamage = safeRollTotal(rollData.dmgRolls[0]);
+            var spellDC = state.sCharacterSheetType === "OGL" ? safeRollTotal(rollData.dc) : rollData.dc;
+            if(spellDamage === undefined){
+                reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
+                return false;
+            }
+            if(typeof spellDC !== "number" || !isFinite(spellDC)){
+                reportMissingRoll("The spell save DC was not present in the message or was unreadable; roll the spell again with its save DC included.");
+                return false;
+            }
             currentlyCastingSpellRoll = rollData;
             log("Saving throw spell!");
             var playerID = findWhoIsControlling(target.associatedCharacter);
@@ -755,20 +791,32 @@ var BattleMaster = BattleMaster || (function() {
         }
         else{
             log("Spell attack!");
+            var toHit = safeRollTotal(rollData.d20Rolls[0]);
+            if(toHit === undefined){
+                reportMissingRoll("The to-hit roll was not present in the message or was unreadable; roll the attack from your character sheet again so it can be adjudicated.");
+                return false;
+            }
             var ac = getAttrByName(target.get('represents'),'npcd_ac');
             if(ac === "" || ac === undefined){
                 log('Couldn\'t find npcd_ac, looking for just ac')
                 ac = getAttrByName(target.get('represents'),'ac');
             }
-            if(ac <= rollData.d20Rolls[0].results.total){
-                log("Hit! Enemy AC is " + ac + " and roll result was " + rollData.d20Rolls[0].results.total);
-                sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Applying damage to ' + target.get('name'));
-                applyDamage(rollData.dmgRolls[0].results.total, rollData.dmgTypes[0], target, getObj('character', target.get('represents')));
-                if(rollData.dmgRolls.length > 1 && rollData.dmgRolls[1].results.total != 0){
-                    applyDamage(rollData.dmgRolls[1].results.total, rollData.dmgTypes[1], target, getObj('character', target.get('represents')));
+            if(ac <= toHit){
+                log("Hit! Enemy AC is " + ac + " and roll result was " + toHit);
+                sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Target: ' + target.get('name'));
+                var damage = safeRollTotal(rollData.dmgRolls[0]);
+                var secondaryDamage = safeRollTotal(rollData.dmgRolls[1]);
+                if(damage === undefined || (rollData.dmgRolls.length > 1 && secondaryDamage === undefined)){
+                    reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
+                    return false;
+                }
+                applyDamage(damage, rollData.dmgTypes[0], target, getObj('character', target.get('represents')));
+                if(secondaryDamage !== undefined && secondaryDamage != 0){
+                    applyDamage(secondaryDamage, rollData.dmgTypes[1], target, getObj('character', target.get('represents')));
                 }
             }
         }
+        return true;
     },
     
     AOESpellAttack = function(){
@@ -813,6 +861,7 @@ var BattleMaster = BattleMaster || (function() {
                 case "cylinder": break;
             }
         }
+        return true;
     },
 
     distanceBetween = function(origin, finalPos){
@@ -1138,26 +1187,50 @@ var BattleMaster = BattleMaster || (function() {
         for(var i = 0; i < listTokensWaitingOnSavingThrowsFrom.length; i++){
             if(findWhoIsControlling(listTokensWaitingOnSavingThrowsFrom[i].associatedCharacter) === rollData.playerid){
                 var token = listTokensWaitingOnSavingThrowsFrom[i];
-                listTokensWaitingOnSavingThrowsFrom.splice(i,1);
                 break;
             }
         }
-        sendChat("BattleMaster",'/w "' + currentPlayerDisplayName +'" Recieved roll for ' + token.token.get("name"));
-        var rollAttribute = currentlyCastingSpellRoll.saveType,
-        rollEffectsDesc = currentlyCastingSpellRoll.saveEffects,
-        rollDC,
-        rollDmg = currentlyCastingSpellRoll.dmgRolls[0].results.total,
-        rollDmgType = currentlyCastingSpellRoll.dmgTypes[0];
-        switch(state.sCharacterSheetType){
-            case "OGL":
-                rollDC = currentlyCastingSpellRoll.dc.results.total;
-            break;
-
-            case "Shaped":
-                rollDC = currentlyCastingSpellRoll.dc;
-            break;
+        var savingThrowRoll = safeRollTotal(rollData.d20Rolls[0]);
+        if(savingThrowRoll === undefined){
+            reportMissingRoll("The saving throw roll was not present in the message or was unreadable; roll the saving throw again from your character sheet.");
+            return false;
         }
-        var savingThrowRoll = rollData.d20Rolls[0].results.total;
+
+        //Past this point every exit consumes the roll expectation, so consume the
+        //target with it. Leaving a stale entry here would make the next valid save
+        //from this player match the OLD token and resolve against the wrong target.
+        if(token){
+            listTokensWaitingOnSavingThrowsFrom.splice(i,1);
+        }
+        if(!currentlyCastingSpellRoll){
+            reportMissingRoll("The spell data was not present; ask the caster to recast the spell before you retry the saving throw.");
+            //Caster-fault: the player receiving this cannot fix it by rolling
+            //again, so consume the expectation rather than trapping them in it.
+            return true;
+        }
+        var rollEffectsDesc = currentlyCastingSpellRoll.saveEffects,
+        rollDmg = safeRollTotal(currentlyCastingSpellRoll.dmgRolls[0]),
+        rollDmgType = currentlyCastingSpellRoll.dmgTypes[0],
+        rollDC = state.sCharacterSheetType === "OGL" ? safeRollTotal(currentlyCastingSpellRoll.dc) : currentlyCastingSpellRoll.dc;
+        if(typeof rollDC !== "number" || !isFinite(rollDC)){
+            reportMissingRoll("The spell save DC was not present in the message or was unreadable; ask the caster to recast the spell with its save DC included.");
+            //Caster-fault: the player receiving this cannot fix it by rolling
+            //again, so consume the expectation rather than trapping them in it.
+            return true;
+        }
+        if(rollDmg === undefined){
+            reportMissingRoll("The spell damage roll was not present in the message or was unreadable; ask the caster to recast the spell with damage included.");
+            //Caster-fault: the player receiving this cannot fix it by rolling
+            //again, so consume the expectation rather than trapping them in it.
+            return true;
+        }
+        if(!token){
+            reportMissingRoll("No target was waiting for this saving throw; ask the caster to select the intended target and recast the spell.");
+            //Caster-fault: the player receiving this cannot fix it by rolling
+            //again, so consume the expectation rather than trapping them in it.
+            return true;
+        }
+        sendChat("BattleMaster",'/w "' + currentPlayerDisplayName +'" Recieved roll for ' + token.token.get("name"));
         if(savingThrowRoll >= rollDC){
             //SAVING THROW EFFECTS GO HERE
             switch(universalizeString(rollEffectsDesc)){
@@ -1171,6 +1244,7 @@ var BattleMaster = BattleMaster || (function() {
         else{
             applyDamage(rollDmg, rollDmgType, token.token, token.associatedCharacter);
         }
+        return true;
     },
     
     applyDamage = function(dmgAmt, dmgType, targetToken, targetCharacter){
