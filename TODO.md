@@ -149,6 +149,25 @@ unusable-class and should land before Phase 1 closes.
       only BattleMaster loaded and capture the
       `This character is controlled by player <name>` log line.
 
+- [ ] **Sequential attack flow: roll to hit, adjudicate, THEN roll damage**
+      (design decided 2026-09-21). The script currently assumes the attack and
+      damage arrive in ONE message, which the 2014 sheet only does when its
+      "Auto Roll Damage & Crit" setting is enabled. Intended behaviour is to
+      emulate the table instead: the player rolls to hit, the script reports
+      hit or miss, and only on a hit does it ask for the damage roll and
+      intercept that as a second roll.
+      Implications:
+      - Auto Roll Damage & Crit should ideally be OFF, the opposite of the
+        current workaround. Revisit the README's setup requirements.
+      - Needs a second pending-roll expectation per attack. Land the
+        `splice(-1, 1)` fix and the safe-roll guards FIRST - this doubles the
+        traffic through exactly the code that currently corrupts on a stray
+        roll.
+      - Applies to weapon attacks and direct spells; AOE/save-based spells
+        already resolve differently.
+      - Decide what happens if the damage roll never arrives (turn timeout,
+        GM override, or leave the expectation pending).
+
 > Test-environment note: the game used for the 2026-09-21 session also ran
 > GroupInitiative v0.9.42, GroupCheck v1.15, kScaffold and the Kingmaker module,
 > and Roll20 warned that multiple character sheets were in use. GroupInitiative
