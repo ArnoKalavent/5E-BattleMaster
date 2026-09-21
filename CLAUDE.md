@@ -41,9 +41,12 @@ You are the orchestrator. You plan, write task specs, run tests, integrate and r
 2. Make sure the tree is clean (`git status`). Commit or ask first, so every delegated step can be reverted.
 3. Write a task spec (template below) and give it to `codex-coder`.
 4. When it returns, read the diff yourself and run `npm test`. A failing suite goes back to the coder with the failure output, once.
-5. Send the change to `gemini-reviewer`. For every finding, either send a fix spec to the coder or rebut it in one sentence. Never drop a finding silently. UNVERIFIED findings about Roll20 behaviour get checked against the Roll20 docs.
+5. Stage everything first (`git add -A`), then send the change to `gemini-reviewer`. The reviewer and the freshness check both read the INDEX, because that is what `git commit` records; the seat script refuses to run with unstaged or untracked files present. For every finding, either send a fix spec to the coder or rebut it in one sentence. Never drop a finding silently. UNVERIFIED findings about Roll20 behaviour get checked against the Roll20 docs.
 6. Second failure of the same task at step 4 or 5: stop delegating, consult the advisor, then hand the full history to `fable-escalation`.
 7. When tests pass and review is clean or rebutted, show Matt a summary - what changed, test result, findings and how each was resolved - and wait for his go-ahead before committing.
+8. Before every commit, run `npm run review:status`. Commit only on FRESH with an approving verdict. STALE, NO REVIEW RECORDED, or a recorded `CHANGES REQUESTED` all mean go back to step 5 - a fresh review that demanded changes is not approval either.
+
+**The review must cover the exact tree you are about to commit** - the index, not the working tree. Hashing the working tree was itself a bug: a staged change hidden behind a reverted worktree produced a digest identical to the reviewed state while `git commit` recorded something else. Any edit after a review invalidates it, including your own few-line edits under the seats exception. This has already gone wrong once: a review returned findings, the fixes were hand-edited and committed without re-running the reviewer, and code no reviewer had seen went into `0829f8a`. Nothing caught it. `npm run review:status` exists because discipline alone did not hold - it compares a digest of what the reviewer was actually shown against the current tree.
 
 If a seat reports SEAT-ERROR, tell Matt which seat is down and what the error said. Do not quietly do that seat's job yourself.
 
