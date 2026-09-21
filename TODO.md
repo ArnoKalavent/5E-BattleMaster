@@ -359,6 +359,17 @@ each was found and have since shifted.
       inline rolls from a prompted player aren't swallowed
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
+- [ ] **Script-wide assumption: combat happens on the player ribbon page.**
+      Raised by review of the `spawnFx` fix (2026-09-19). Every page-dependent
+      call resolves the page as `Campaign().get('playerpageid')` — the reticle's
+      `_pageid` (line 232), `sendPing` (line 247), the geometry page lookup
+      (line 878) — and the FX calls now rely on the same value via the documented
+      default. So if the GM runs an encounter on one map while the player ribbon
+      sits on another, the reticle, the ping and the FX all land on the ribbon
+      page together. Consistent, but wrong for split-party or GM-side testing.
+      Fixing it means deriving the page from the acting token's `_pageid` in ALL
+      of those places at once; changing FX alone would make effects diverge from
+      the reticle they are meant to accompany.
 
 ## V2 — Future track
 

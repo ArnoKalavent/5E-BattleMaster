@@ -741,7 +741,7 @@ var BattleMaster = BattleMaster || (function() {
             if(secondaryDamage !== undefined && secondaryDamage != 0){
                 applyDamage(secondaryDamage, rollData.dmgTypes[1], target.token, target.associatedCharacter);
             }
-            spawnFx(target.token.get('left'), target.token.get('top'), 'glow-blood',getObj('page', Campaign().get('playerpageid')));
+            spawnFx(target.token.get('left'), target.token.get('top'), 'glow-blood');
         }
         else{
             log("Miss! Enemy AC is " + target.ac + " and roll result was " + toHit);
@@ -862,7 +862,7 @@ var BattleMaster = BattleMaster || (function() {
                 case "sphere": 
                     var effectType = "burst-"+dmgTypeToFXName(rollData.dmgTypes[0]);
                     log("Spawning fx: " + effectType);
-                    spawnFx(x,y,effectType,getObj('page', Campaign().get('playerpageid')));
+                    spawnFx(x,y,effectType);
                     _.each(findAllTokensInSphere(createLocFromToken(currentTurnToken.token),args[2]), spellEffects)
                 break;
                 case "cube": break;
@@ -895,10 +895,9 @@ var BattleMaster = BattleMaster || (function() {
         else if (direction.toLowerCase().indexOf('right') != -1){
             xMod = 35;
         }
-        //spawnFxBetweenPoints({x:(x+xMod),y:(y+yMod)},{})        
         var effectType = "breath-"+dmgTypeToFXName(currentlyCastingSpellRoll.dmgTypes[0]);
         log("Spawning fx: " + effectType);
-        spawnFxBetweenPoints({x:(x+xMod), y:(y+yMod)},{x:(x+xMod+xMod), y:(y+yMod+yMod)},effectType,getObj('page', Campaign().get('playerpageid')));
+        spawnFxBetweenPoints({x:(x+xMod), y:(y+yMod)},{x:(x+xMod+xMod), y:(y+yMod+yMod)},effectType);
         _.each(findAllTokensInCone(new location(x + xMod, y + yMod,0), direction, range), spellEffects);
     },
 
@@ -920,7 +919,7 @@ var BattleMaster = BattleMaster || (function() {
         var effectType = "beam-"+dmgTypeToFXName(currentlyCastingSpellRoll.dmgTypes[0]);
         log("Spawning fx: " + effectType);
         var startLoc = new location(x+xMod,y+yMod,0), endLoc = new location(x+xMod+xMod, y+yMod+yMod,0);
-        spawnFxBetweenPoints(startLoc,endLoc,effectType,getObj('page', Campaign().get('playerpageid')));
+        spawnFxBetweenPoints(startLoc,endLoc,effectType);
         //findAllTokensInLine takes (origin location, direction, range) - the
         //same contract as findAllTokensInCone above.
         _.each(findAllTokensInLine(new location(x + xMod, y + yMod, 0), direction, range), spellEffects);

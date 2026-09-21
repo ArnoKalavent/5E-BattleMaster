@@ -98,7 +98,15 @@ function findAllTokensInLine(origin, dir, rng) {
     return [];
 }
 function spellEffects() {}
-function spawnFxBetweenPoints() {}
+var recordedFxArgs = null;
+function spawnFxBetweenPoints(point1, point2, effectType) {
+    recordedFxArgs = {
+        length: arguments.length,
+        point1: point1,
+        point2: point2,
+        effectType: effectType
+    };
+}
 function dmgTypeToFXName() { return 'electric'; }
 function getObj() { return undefined; }
 function Campaign() { return { get: function () { return 'page1'; } }; }
@@ -110,6 +118,23 @@ eval('lineDirectionPromptCallback = function()' +
 /* eslint-enable no-eval */
 
 lineDirectionPromptCallback();
+
+expect('line FX call passes exactly 3 arguments',
+    recordedFxArgs && recordedFxArgs.length, 3);
+expect('line FX call passes point1 as an object with numeric x and y',
+    recordedFxArgs !== null &&
+    recordedFxArgs.point1 !== null &&
+    typeof recordedFxArgs.point1 === 'object' &&
+    typeof recordedFxArgs.point1.x === 'number' &&
+    typeof recordedFxArgs.point1.y === 'number', true);
+expect('line FX call passes point2 as an object with numeric x and y',
+    recordedFxArgs !== null &&
+    recordedFxArgs.point2 !== null &&
+    typeof recordedFxArgs.point2 === 'object' &&
+    typeof recordedFxArgs.point2.x === 'number' &&
+    typeof recordedFxArgs.point2.y === 'number', true);
+expect('line FX call passes the effect type as a string',
+    recordedFxArgs !== null && typeof recordedFxArgs.effectType === 'string', true);
 
 expect('call site passes a location object as origin',
     recordedArgs !== null &&
