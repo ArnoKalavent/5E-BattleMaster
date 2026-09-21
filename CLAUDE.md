@@ -22,6 +22,7 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
 - Chat commands read like what is happening at the table: `!combat roll initiative`, `!combat begin round 2`, `!combat end`. New commands follow that grammar.
 - Every behaviour change ships with unit tests, and `npm test` must pass before anything is called done.
 - README changes are batched to the close of a phase. During a phase, collect them in the phase's notes instead of editing the README.
+- The script always prints its build rev on startup: a `-=> BattleMaster <rev> <=-` banner logged in the `on('ready')` handler before anything else runs. The rev lives in the `buildRev` literal near the top of `5ebattlemaster.js`, left as `'dev (unstamped)'` in source and filled in only by `npm run build`, which writes `dist/5ebattlemaster.js`. Deploy by pasting `dist/`, never the source file. Any change that touches the banner, the literal or `tools/build.js` keeps that guarantee intact - an unstamped or wrongly-stamped paste is how a stale build goes unnoticed.
 
 ## Seats - who does what
 

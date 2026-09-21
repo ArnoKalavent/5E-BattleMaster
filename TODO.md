@@ -84,6 +84,78 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
       also switched a stray global reference to the function's own parameter.
       Tested (3 cases, same file).
 
+### Live smoke-test findings, 2026-09-21 (all open)
+
+Found running the script in a real game. Line numbers are against the working
+tree as of the build-rev change. The first three are crash- or
+unusable-class and should land before Phase 1 closes.
+
+- [ ] **Default sheet type is `"Shaped"`** (line 40). A fork that supports only
+      the 2014 ("OGL") sheet defaults to the sheet being removed in Phase 4, so
+      a fresh install parses every roll with the wrong branch. Confirmed live:
+      the first weapon attack threw
+      `TypeError: Cannot read properties of undefined (reading 'results')` and
+      took the whole sandbox down. Fix: default to OGL. Near one line, but it
+      needs a migration thought for campaigns already holding `"Shaped"` in
+      persistent `state`.
+- [ ] **`parseInt` failure defeats every `!= -1` guard** (lines 99-103).
+      **CONFIRMED live 2026-09-21 with a stack trace**, on a build verified as
+      `baa6ca1`: the attack roll parsed and hit correctly, then
+      `WeaponAttackRollCallback` threw
+      `TypeError: Cannot read properties of undefined (reading 'results')` at
+      `applyDamage(rollData.dmgRolls[0].results.total, ...)` - i.e. `d20Rolls`
+      was fine and `dmgRolls[0]` was `undefined`. Cause: the message carried no
+      `{{dmg1=$[[` field (the 2014 sheet only folds damage into the attack
+      template when Auto Roll Damage & Crit is enabled), so
+      `indexOf` returned -1, `-1 + 10` sliced from character 9, `parseInt` of
+      that garbage returned `NaN`, `NaN != -1` passed the guard, and
+      `inlineData[NaN]` - `undefined` - was pushed. Enabling the sheet setting
+      is a workaround, not a fix. Original description follows. When a
+      template field is absent, `parseInt` returns `NaN`, and `NaN != -1` is
+      true, so `inlineData[NaN]` — `undefined` — is pushed into `d20Rolls` /
+      `dmgRolls`. Callbacks then dereference `[0].results` and crash. This is
+      the mechanism behind the finding above, and it fires independently
+      whenever a roll template is missing an expected field (e.g. the sheet's
+      Auto Roll Damage & Crit setting is off, so there is no `dmg1`). Fix:
+      validate the parsed index is a real number AND resolves in `inlineData`
+      before pushing; guard the callback dereferences too.
+- [ ] **`splice(-1, 1)` corrupts the pending-roll list** (lines 432-433). When a
+      roll arrives from a player who is not the expected roller,
+      `playerIDLocation` is `-1`, the callback is correctly skipped — but the
+      splices still run, and `splice(-1, 1)` removes the LAST element rather
+      than nothing. So one stray inline roll silently discards the expectation
+      the script was legitimately waiting on, and the turn is dead with no
+      message. Fix: only splice when the index is >= 0. Related to, but
+      distinct from, the Phase 5 roll-interception guard item.
+- [ ] **`findTokenAtTarget` fails silently** (lines 407-409). The `else` branch
+      taken when the reticle token cannot be resolved is completely empty — no
+      whisper, no log — so a failed target resolution is indistinguishable from
+      nothing happening. Fix: log and whisper the player.
+- [ ] **Targeting is scoped to the turn order** (line 371). `findTokenAtTarget`
+      only considers tokens present in `Campaign().get('turnorder')`, so
+      anything not in the tracker cannot be targeted and the failure is silent
+      (see above). Decide whether this is intended (encounter participants
+      only) and document it, or widen it to tokens on the page.
+- [ ] **UNRESOLVED: roll interception does not fire for a GM proxying an
+      offline player.** Live symptom: `We have recieved a roll result!` logs,
+      but nothing happens. `findWhoIsControlling` was ruled out by direct
+      inspection — with the player offline and the GM co-listed and online,
+      step 2 of the picker (`isOnline`, any) returns the GM, which is correct.
+      A `!whocontrols` diagnostic confirmed both IDs resolve, the player is
+      `online=false isGM=false`, and the GM is `online=true isGM=true`. So the
+      fault is downstream of the picker. Prime suspect is the `splice(-1, 1)`
+      bug above, triggered by an unrelated inline roll (the test game also ran
+      GroupInitiative and GroupCheck). Next step: re-test in a clean game with
+      only BattleMaster loaded and capture the
+      `This character is controlled by player <name>` log line.
+
+> Test-environment note: the game used for the 2026-09-21 session also ran
+> GroupInitiative v0.9.42, GroupCheck v1.15, kScaffold and the Kingmaker module,
+> and Roll20 warned that multiple character sheets were in use. GroupInitiative
+> writes to the turn order, which is exactly what BattleMaster's turn listener
+> watches. Re-confirm any finding from that session in a single-sheet game with
+> only BattleMaster loaded before writing a fix against it.
+
 ## Phase 1.5 — Repo restructure & test infrastructure
 
 - [x] Flatten repo: single `5ebattlemaster.js` at root; `0.1/`/`0.2/`
@@ -96,6 +168,18 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 - [x] Harness pattern extended to all Phase 1 fixes: `npm test` chains
       `findWhoIsControlling` (13) + `turnOrder` (10) + `lineAoe` (15) = 38
       cases, all green
+- [x] **Build-rev stamping** (2026-09-21): `5ebattlemaster.js` carries a
+      `buildRev` literal (left as `'dev (unstamped)'` in source) exposed on the
+      module and logged as a `-=> BattleMaster <rev> <=-` banner in the
+      `on('ready')` handler, before `RegisterEventHandlers()` so it still prints
+      if registration throws. `npm run build` (`tools/build.js`) writes a stamped
+      copy to `dist/5ebattlemaster.js` (gitignored) using
+      `git describe --always --dirty --abbrev=7` plus the package version.
+      **Paste from `dist/`, not from the source file.** Added because a stale
+      paste cost a debugging session - stack-trace line numbers did not match
+      the repo and nobody noticed. Tested (`tests/build.test.js`), including
+      that the built file is byte-identical to source apart from the stamped
+      line and that the build never modifies the source.
 
 ## Phase 2 — State, config & DeathMarkersPlus removal (V1 scope)
 

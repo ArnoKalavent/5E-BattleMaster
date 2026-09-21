@@ -1,5 +1,8 @@
 var BattleMaster = BattleMaster || (function() {
     'use strict';
+
+    /* BUILD REVISION — filled in by tools/build.js for distribution */
+    var buildRev = 'dev (unstamped)';
     
     var bInCombat, bStagingInitiative, bIsWaitingOnRoll, bIsWaitingOnResponse, responseCallbackFunction, selectedTokenCallbackFunction,
     sLastPromptedTurnID, iLastTurnorderLength = 0,
@@ -1332,11 +1335,13 @@ var BattleMaster = BattleMaster || (function() {
         });
     };
     return {
+        BuildRev: buildRev,
         RegisterEventHandlers: RegisterEventHandlers,
     };
 }());
 on('ready',function(){
     'use strict';
     
+    log('-=> BattleMaster ' + BattleMaster.BuildRev + ' <=- [' + new Date() + ']');
     BattleMaster.RegisterEventHandlers();
 });

@@ -1,5 +1,6 @@
 # Dependencies (dev tooling only; the script itself has none)
 node_modules/
+dist/
 
 # npm/yarn logs and caches
 npm-debug.log*
