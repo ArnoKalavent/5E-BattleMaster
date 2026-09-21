@@ -84,13 +84,15 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
       also switched a stray global reference to the function's own parameter.
       Tested (3 cases, same file).
 
-### Live smoke-test findings, 2026-09-21 (all open)
+### Live smoke-test findings, 2026-09-21
 
-Found running the script in a real game. Line numbers are against the working
-tree as of the build-rev change. The first three are crash- or
-unusable-class and should land before Phase 1 closes.
+Found running the script in a real game. The three crash-class items are FIXED
+(commits 0829f8a and the parser replacement); two targeting items and the
+original interception symptom remain open. Line numbers below are from when
+each was found and have since shifted.
 
-- [ ] **Default sheet type is `"Shaped"`** (line 40). A fork that supports only
+- [x] **Default sheet type is `"Shaped"`** (line 40). FIXED - now defaults to
+      `"OGL"`. A fork that supports only
       the 2014 ("OGL") sheet defaults to the sheet being removed in Phase 4, so
       a fresh install parses every roll with the wrong branch. Confirmed live:
       the first weapon attack threw
@@ -98,7 +100,9 @@ unusable-class and should land before Phase 1 closes.
       took the whole sandbox down. Fix: default to OGL. Near one line, but it
       needs a migration thought for campaigns already holding `"Shaped"` in
       persistent `state`.
-- [ ] **`parseInt` failure defeats every `!= -1` guard** (lines 99-103).
+- [x] **`parseInt` failure defeats every `!= -1` guard** (lines 99-103). FIXED -
+      the parser now uses regex extractors and an "absent means undefined"
+      convention; the `-1` sentinel is gone.
       **CONFIRMED live 2026-09-21 with a stack trace**, on a build verified as
       `baa6ca1`: the attack roll parsed and hit correctly, then
       `WeaponAttackRollCallback` threw
@@ -119,7 +123,8 @@ unusable-class and should land before Phase 1 closes.
       Auto Roll Damage & Crit setting is off, so there is no `dmg1`). Fix:
       validate the parsed index is a real number AND resolves in `inlineData`
       before pushing; guard the callback dereferences too.
-- [ ] **`splice(-1, 1)` corrupts the pending-roll list** (lines 432-433). When a
+- [x] **`splice(-1, 1)` corrupts the pending-roll list** (lines 432-433). FIXED
+      in 0829f8a; pinned by a test that fails if the fix is reverted. When a
       roll arrives from a player who is not the expected roller,
       `playerIDLocation` is `-1`, the callback is correctly skipped — but the
       splices still run, and `splice(-1, 1)` removes the LAST element rather
@@ -167,6 +172,16 @@ unusable-class and should land before Phase 1 closes.
         already resolve differently.
       - Decide what happens if the damage roll never arrives (turn timeout,
         GM override, or leave the expectation pending).
+
+- [x] **Damage resistances never applied on the 2014 sheet.** Found while
+      scoping the default-sheet fix. `state.sCharacterSheetType` drives TWO
+      switches: the parser, and `applyDamage`'s choice of which attributes to
+      read for immunities / resistances / vulnerabilities (`npc_*` for OGL vs
+      `damage_*` for Shaped). With the wrong `"Shaped"` default, a 2014-sheet
+      game read attributes that do not exist, so resistances silently never
+      applied - no crash, just wrong numbers. FIXED as a side effect of
+      correcting the default. NOTE for testing: damage on resistant or immune
+      creatures will now differ from before, and that is the fix working.
 
 > Test-environment note: the game used for the 2026-09-21 session also ran
 > GroupInitiative v0.9.42, GroupCheck v1.15, kScaffold and the Kingmaker module,

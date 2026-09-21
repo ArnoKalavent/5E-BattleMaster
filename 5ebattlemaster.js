@@ -37,7 +37,7 @@ var BattleMaster = BattleMaster || (function() {
         state.bDeathMarkersPlusInstalled = false;
     }
     if(!state.sCharacterSheetType){
-        state.sCharacterSheetType = "Shaped";
+        state.sCharacterSheetType = "OGL";
     }
     // Inline rolls may be absent, or occupy an array slot without an entry.
     function safeRollTotal(entry){
@@ -53,11 +53,27 @@ var BattleMaster = BattleMaster || (function() {
         sendChat("BattleMaster", '/w ' + recipient + ' ' + problem);
     }
 
+    // Template names are literal, even when they contain regex metacharacters.
+    function extractTemplateText(content, fieldName){
+        var escapedName = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var match = new RegExp('\\{\\{' + escapedName + '=([\\s\\S]*?)\\}\\}').exec(content);
+        return match ? match[1] : undefined;
+    }
+
+    function extractInlineRollIndex(content, fieldName){
+        var value = extractTemplateText(content, fieldName);
+        var match = value === undefined ? null : /^\$\[\[(\d+)\]\]$/.exec(value);
+        if(!match){return undefined;}
+        var index = Number(match[1]);
+        return Number.isSafeInteger(index) && index >= 0 ? index : undefined;
+    }
+
     /* OBJECTS */
     function rollData(rollMsg){
         log("Creating RollData object!");
-        var inlineData = rollMsg.inlinerolls;
-        var r1Index = -1, r2Index = -1, dmg1Index = -1, dmg2Index = -1, crit1Index = -1, crit2Index = -1, saveDCIndex = -1;
+        var inlineData = rollMsg.inlinerolls || [];
+        var r1Index, r2Index, dmg1Index, dmg2Index, crit1Index, crit2Index, saveDCIndex;
+        var dmgType1, dmgType2, saveType;
         log("Inline data: " + JSON.stringify(inlineData));
         log(rollMsg.content);
         this.playerid = rollMsg.playerid;
@@ -71,50 +87,56 @@ var BattleMaster = BattleMaster || (function() {
         this.saveEffects = "";
         switch(state.sCharacterSheetType){
             case "OGL":
-                this.bRequiresSavingThrow = (universalizeString(rollMsg.content).indexOf("saveattr") != -1);
-                var r1Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{r1=$[[") + 8, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{r1=$[[") + 8,"]]")),10),
-                r2Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{r2=$[[") + 8, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{r2=$[[") + 8,"]]")),10),
-                saveDCIndex = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{savedc=$[[") + 12, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{savedc=$[[") + 12,"]]")),10),
-                dmg1Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{dmg1=$[[") + 10, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{dmg1=$[[") + 10,"]]")),10),
-                //dmg2Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{savedc=$[[") + 12, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{savedc=$[[") + 12,"]]")),10),
-                crit1Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{crit1=$[[") + 11, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{crit1=$[[") + 11,"]]")),10),
-                //crit2Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{savedc=$[[") + 12, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{savedc=$[[") + 12,"]]")),10),
-                dmgType1 = rollMsg.content.substring(rollMsg.content.indexOf("dmg1type=") + 9, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("dmg1type=") + 9,"}}"));
-                //dmgType2 = rollMsg.content.substring(rollMsg.content.indexOf("dmg2type=") + 9, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("dmg2type=") + 9,"}}")),
-                this.rangeString = rollMsg.content.substring(rollMsg.content.indexOf("{{range=") + 8, firstIndexAfter(rollMsg.content, rollMsg.content.indexOf("{{range=") + 8, "}}"));
-                this.saveType = rollMsg.content.substring(rollMsg.content.indexOf("{{saveattr=") + 11, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("saveattr=") + 11,"}}"));
-                this.saveEffects = rollMsg.content.substring(rollMsg.content.indexOf("savedesc=") + 9, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("savedesc=") + 9,"}}"));
+                r1Index = extractInlineRollIndex(rollMsg.content, 'r1');
+                r2Index = extractInlineRollIndex(rollMsg.content, 'r2');
+                saveDCIndex = extractInlineRollIndex(rollMsg.content, 'savedc');
+                dmg1Index = extractInlineRollIndex(rollMsg.content, 'dmg1');
+                //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');
+                crit1Index = extractInlineRollIndex(rollMsg.content, 'crit1');
+                //crit2Index = extractInlineRollIndex(rollMsg.content, 'crit2');
+                dmgType1 = extractTemplateText(rollMsg.content, 'dmg1type');
+                //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');
+                this.rangeString = extractTemplateText(rollMsg.content, 'range') || "";
+                saveType = extractTemplateText(rollMsg.content, 'saveattr');
+                this.bRequiresSavingThrow = saveType !== undefined;
+                this.saveType = saveType || "";
+                this.saveEffects = extractTemplateText(rollMsg.content, 'savedesc') || "";
             break;
             case "Shaped":
-                this.bRequiresSavingThrow = (universalizeString(rollMsg.content).indexOf("saving_throw_vs_ability") != -1);
+                saveType = extractTemplateText(rollMsg.content, 'saving_throw_vs_ability');
+                this.bRequiresSavingThrow = saveType !== undefined;
+                this.saveType = saveType || "";
                 if(this.bRequiresSavingThrow){
-                    dmg1Index=parseInt(stringBetween(rollMsg.content,"{{saving_throw_damage=$[[","]]"),10);
-                    dmgType1=stringBetween(rollMsg.content,"{{saving_throw_damage_type=","}}");    
-                    this.saveType = stringBetween(rollMsg.content,"{{saving_throw_vs_ability=","}}");
-                    this.dc = parseInt(stringBetween(rollMsg.content,"{{saving_throw_dc=","}}"),10);
-                    //this.saveEffects = rollMsg.content.substring(rollMsg.content.indexOf("savedesc=") + 9, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("savedesc=") + 9,"}}"));
+                    dmg1Index = extractInlineRollIndex(rollMsg.content, 'saving_throw_damage');
+                    dmgType1 = extractTemplateText(rollMsg.content, 'saving_throw_damage_type');
+                    var saveDC = parseInt(extractTemplateText(rollMsg.content, 'saving_throw_dc'), 10);
+                    this.dc = isNaN(saveDC) ? undefined : saveDC;
                 }
-                else if(universalizeString(rollMsg.content).indexOf("attack1") != -1){
-                    var r1Index = parseInt(stringBetween(rollMsg.content,"{{attack1=$[[","]]"),10);
-                    //r2Index = parseInt(rollMsg.content.substring(rollMsg.content.indexOf("{{r2=$[[") + 8, firstIndexAfter(rollMsg.content,rollMsg.content.indexOf("{{r2=$[[") + 8,"]]")),10),
-                    var dmg1Index = parseInt(stringBetween(rollMsg.content,"{{attack_damage=$[[","]]"),10),
-                    dmg2Index = parseInt(stringBetween(rollMsg.content,"{{attack_second_damage=$[[","]]"),10),
-                    crit1Index = parseInt(stringBetween(rollMsg.content,"{{attack_damage_crit=$[[","]]"),10),
-                    crit2Index = parseInt(stringBetween(rollMsg.content,"{{attack_second_damage_crit=$[[","]]"),10),
-                    dmgType1 = stringBetween(rollMsg.content,"{{attack_damage_type=","}}"),
-                    dmgType2 = stringBetween(rollMsg.content,"{{attack_second_damage_type=","}}");
+                else if(extractTemplateText(rollMsg.content, 'attack1') !== undefined){
+                    r1Index = extractInlineRollIndex(rollMsg.content, 'attack1');
+                    dmg1Index = extractInlineRollIndex(rollMsg.content, 'attack_damage');
+                    dmg2Index = extractInlineRollIndex(rollMsg.content, 'attack_second_damage');
+                    crit1Index = extractInlineRollIndex(rollMsg.content, 'attack_damage_crit');
+                    crit2Index = extractInlineRollIndex(rollMsg.content, 'attack_second_damage_crit');
+                    dmgType1 = extractTemplateText(rollMsg.content, 'attack_damage_type');
+                    dmgType2 = extractTemplateText(rollMsg.content, 'attack_second_damage_type');
                 }
                 else{
-                    var r1Index = parseInt(stringBetween(rollMsg.content,"{{roll1=$[[","]]"),10);
+                    r1Index = extractInlineRollIndex(rollMsg.content, 'roll1');
                 }
-                //this.rangeString = rollMsg.content.substring(rollMsg.content.indexOf("{{range=") + 8, firstIndexAfter(rollMsg.content, rollMsg.content.indexOf("{{range=") + 8, "}}"));
             break;
         }
-        if(r1Index != -1){this.d20Rolls.push(inlineData[r1Index]);}
-        if(r2Index != -1){this.d20Rolls.push(inlineData[r2Index]);}
-        if(saveDCIndex != -1){this.dc = inlineData[saveDCIndex]; log("SaveDCIndex isn't negative one!");}
-        if(dmg1Index != -1){this.dmgRolls.push(inlineData[dmg1Index]); this.dmgTypes.push(universalizeString(dmgType1));}
-        if(dmg2Index != -1){this.dmgRolls.push(inlineData[dmg2Index]); this.dmgTypes.push(universalizeString(dmgType2));}
+        if(r1Index !== undefined && inlineData[r1Index]){this.d20Rolls.push(inlineData[r1Index]);}
+        if(r2Index !== undefined && inlineData[r2Index]){this.d20Rolls.push(inlineData[r2Index]);}
+        if(saveDCIndex !== undefined && inlineData[saveDCIndex]){this.dc = inlineData[saveDCIndex];}
+        if(dmg1Index !== undefined && inlineData[dmg1Index]){
+            this.dmgRolls.push(inlineData[dmg1Index]);
+            this.dmgTypes.push(universalizeString(dmgType1 || ""));
+        }
+        if(dmg2Index !== undefined && inlineData[dmg2Index]){
+            this.dmgRolls.push(inlineData[dmg2Index]);
+            this.dmgTypes.push(universalizeString(dmgType2 || ""));
+        }
     }
     function location(x,y,z){
         this.x = x;
@@ -175,20 +197,6 @@ var BattleMaster = BattleMaster || (function() {
         );
     },
 
-    firstIndexAfter = function(string, preIndex, search){
-        return (preIndex + string.substring(preIndex).indexOf(search));
-    },
-
-    stringBetween = function(totalString, startString, endString){
-        var s = totalString.substring(totalString.indexOf(startString) + startString.length, firstIndexAfter(totalString,totalString.indexOf(startString) + startString.length,endString));
-        if(s){
-            return s;
-        }
-        else{
-            return "";
-        }
-    },
-    
     /*Makes the API buttons used throughout the script*/
     makeButton = function(command, label, backgroundColor, color){
         return templates.button({
