@@ -299,9 +299,18 @@ each was found and have since shifted.
 - [x] **`sendPing`** — fixed at its only call site (in `promptTarget`):
       now `(x, y, playerpageid, null, true)` per current signature. Covered
       by a reticle test asserting the argument layout.
-- [ ] **`spawnFx` / `spawnFxBetweenPoints`** — script passes a page *object* as
+- [x] **`spawnFx` / `spawnFxBetweenPoints`** — script passed a page *object* as
       the 4th arg; docs want a page ID string, and it's optional with the right
-      default. Drop the 4th argument everywhere.
+      default. DONE (c714987): the 4th argument is dropped at all four call
+      sites, which is behaviour-preserving because the documented default is
+      exactly the `playerpageid` each site was already computing - and it
+      removes an unguarded `getObj` from the FX path. A stale commented-out
+      two-argument call was deleted. The line call site is pinned by an
+      `arguments.length === 3` assertion in `tests/lineAoe.test.js`; the other
+      three change identically but nothing in the repo reaches them. Written
+      before the roll-handling work, then rebased onto current master and
+      re-reviewed, because `0829f8a` had since rewritten two of the callbacks
+      containing these call sites.
 - [x] **Reticle image** (pulled forward - blocked live testing; the original
       author's library URL is now access-denied, `createObj` returned
       undefined, and `.id` on it crashed the whole sandbox):
