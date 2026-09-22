@@ -35,9 +35,11 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
       duplicate prompts on re-sorts). Tested (25 cases,
       `tests/combatFlow.test.js`, incl. full bug-scenario simulation).
 
-> **Exit criterion:** all four fixes landed + live smoke test in an actual
-> Roll20 game (PC turn, NPC turn, custom tracker entry present, weapon
-> attack, cone AOE, line AOE).
+> **Exit criterion:** all four fixes landed + the live smoke test plan below
+> passing in an actual Roll20 game. Gate 2 is the original criterion (PC turn,
+> NPC turn, custom tracker entry present, weapon attack, cone AOE, line AOE);
+> gates 3 and 4 were added once the roll-handling and parser fixes landed, and
+> gate 0 gates all of them.
 > README fully synced with landed fixes as of 2026-07-24 (commands, reticle
 > setup, controller behavior, tracker guards, Known Issues, changelog) —
 > only the live smoke test remains to close Phase 1.
@@ -46,7 +48,19 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 > `!combat reticleconfig`. That still works as a legacy alias, so the README is
 > not wrong, but `!combat set reticle` should be documented as the primary form.
 >
-> **Live smoke test — reticle setup (2026-09-19 changes).** As GM:
+> **Live smoke test plan (revised 2026-09-22).** Run the gates in order; gate 0
+> gates everything after it. Expectations below come from the source, not memory.
+>
+> **Gate 0 — build identity and environment.**
+> Run `npm run build` and paste `dist/5ebattlemaster.js`, NOT the source file.
+> The console must print `-=> BattleMaster v0.3.0-dev (<rev>) <=-` with the rev
+> you just built. `dev (unstamped)` means the source was pasted; a different
+> hash means a stale build. A stale paste already cost one debugging session.
+> Use a clean game: ONE character sheet, and BattleMaster as the only Mod. The
+> 2026-09-21 run also had GroupInitiative, GroupCheck and kScaffold loaded, and
+> GroupInitiative writes to the turn order this script watches.
+>
+> **Gate 1 — reticle setup.** As GM:
 > 1. Select a token whose image is from your own Roll20 library, run
 >    `!combat set reticle` — expect the "saved" whisper.
 > 2. Run `!combat set reticle <library-thumb-url>` with nothing selected —
@@ -57,6 +71,51 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 > 4. Run `!combat set` with no second word — expect the usage whisper, no crash.
 > 5. As a NON-GM player, run `!combat set reticle <url>` — expect a refusal
 >    whisper and no change to the configured image.
+>
+> **Gate 2 — Phase 1 exit criterion.** PC turn, NPC turn, custom tracker entry
+> present (nobody is prompted - silence is correct, it waits for the GM to
+> advance), weapon attack, cone AOE, line AOE.
+>
+> **Gate 3 — roll handling (0829f8a).** This exercises the crash that took the
+> sandbox down on 2026-09-21.
+> 1. With the sheet's **Auto Roll Damage & Crit ON**: attack, hit, damage
+>    applies. The happy path.
+> 2. Turn that setting **OFF** and attack again. Before the fix this killed the
+>    sandbox for the whole table. Expect `Hit! Target: <name>` followed by a
+>    whisper naming the setting, and the sandbox still ALIVE - confirm by
+>    running any `!combat` command afterwards.
+> 3. Turn it back **ON** and re-roll the same attack. It must resolve normally.
+>    This is the retain-the-expectation contract: a rejected roll leaves the
+>    script still listening, so "retry the attack" is real advice rather than a
+>    lie.
+> 4. While the script is waiting on one player's attack roll, have a DIFFERENT
+>    player roll anything in chat. The pending attack must still resolve. This
+>    is the `splice(-1, 1)` fix - that bug silently destroyed the expectation
+>    and left the turn dead with no message.
+>
+> **Gate 4 — resistances (2276a51).** These never applied on the 2014 sheet
+> before, because the wrong default sheet type made `applyDamage` read
+> `damage_*` attributes instead of `npc_*`. Attack a creature with
+> `npc_resistances` set to the damage type: damage halved (`Math.round(dmgAmt/2)`)
+> and the log reads `<name> has resistance to <type> damage!`. `npc_immunities`
+> → no damage at all. `npc_vulnerabilities` → doubled (`Math.round(2*dmgAmt)`).
+> Numbers on resistant creatures WILL differ from previous sessions; that is the
+> fix working.
+>
+> **Gate 5 — confirm the two open targeting bugs.** Not fixes - probes, so a
+> result either way is informative.
+> 1. Try to target a token that is NOT in the turn tracker. Expect silent
+>    failure. That confirms both open findings at once: targeting is scoped to
+>    the turn order, and `findTokenAtTarget`'s empty `else` reports nothing.
+> 2. The unresolved interception symptom: GM proxying an offline player's
+>    character. The crash fix is a plausible but unproven explanation. If it
+>    recurs on a verified build in a clean game, it is a different bug - capture
+>    the `This character is controlled by player <name>` log line.
+>
+> **Gate 6 — fresh install default (needs a SECOND, brand-new game).** Paste,
+> do NOT run `!combat config`, and attack. It must parse correctly immediately.
+> The main test campaign has `"OGL"` persisted from the manual fix, so it cannot
+> test the default - only a new game can.
 
 - [x] **Fix `findWhoIsControlling` GM fallback** — rewritten with
       online-aware preference order: online non-GM controller > online GM
