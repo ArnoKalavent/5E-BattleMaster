@@ -476,6 +476,9 @@ var BattleMaster = BattleMaster || (function() {
 		switch(args[0]) {
 		    case '!combat':
 		        switch(args[1]){
+                    case 'cancel':
+                        CancelPendingRolls(msg, args[2] === 'all');
+                    break;
 		            case 'roll':  //"!combat roll initiative"
 		            case 'start': //legacy alias
 		                StageInitiative();
@@ -572,6 +575,57 @@ var BattleMaster = BattleMaster || (function() {
 		}
     },
     
+    CancelPendingRolls = function(msg, cancelAll){
+        var caller = getObj('player', msg.playerid);
+        var recipient = caller ? caller.get('displayname') : (msg.who || 'Player');
+        var whisper = '/w "' + recipient.replace(/"/g, '') + '" ';
+        if(cancelAll && !playerIsGM(msg.playerid)){
+            sendChat('BattleMaster', whisper + 'Only a GM can cancel all pending rolls.');
+            return;
+        }
+        var cancelledRolls = 0, cancelledSaves = 0;
+        var canClearPrompt = cancelAll || (currentTurnPlayer && currentTurnPlayer.id === msg.playerid);
+        var hadPrompt = !!canClearPrompt && !!(bIsWaitingOnResponse || responseCallbackFunction ||
+            selectedTokenCallbackFunction || reticleTokenId);
+        for(var i = listPlayerIDsWaitingOnRollFrom.length - 1; i >= 0; i--){
+            if(cancelAll || listPlayerIDsWaitingOnRollFrom[i] === msg.playerid){
+                listPlayerIDsWaitingOnRollFrom.splice(i, 1);
+                listRollCallbackFunctions.splice(i, 1);
+                cancelledRolls++;
+            }
+        }
+        for(var j = listTokensWaitingOnSavingThrowsFrom.length - 1; j >= 0; j--){
+            var waitingTarget = listTokensWaitingOnSavingThrowsFrom[j];
+            if(cancelAll || (waitingTarget &&
+                findWhoIsControlling(waitingTarget.associatedCharacter) === msg.playerid)){
+                listTokensWaitingOnSavingThrowsFrom.splice(j, 1);
+                cancelledSaves++;
+            }
+        }
+        if(canClearPrompt){
+            bIsWaitingOnResponse = false;
+            responseCallbackFunction = undefined;
+            selectedTokenCallbackFunction = undefined;
+            var reticle = reticleTokenId ? getObj('graphic', reticleTokenId) : undefined;
+            if(reticle){ reticle.remove(); }
+            reticleTokenId = undefined;
+        }
+        bIsWaitingOnRoll = listPlayerIDsWaitingOnRollFrom.length > 0;
+        // Keep target so a different action can use the same creature without re-aiming.
+        if(!cancelledRolls && !cancelledSaves && !hadPrompt){
+            sendChat('BattleMaster', whisper + 'There was nothing to cancel.');
+            return;
+        }
+        sendChat('BattleMaster', whisper + 'Cancelled ' + (cancelAll ? 'everyone\'s' : 'your') +
+            ' pending rolls (' + cancelledRolls + ') and saving-throw targets (' + cancelledSaves + ')' +
+            (hadPrompt ? ', and cleared the outstanding prompts.' : '.'));
+        var turnGraphic = findCurrentTurnToken(Campaign().get('turnorder'));
+        if(canClearPrompt && turnGraphic && currentTurnToken && currentTurnToken.token &&
+            currentTurnToken.token.id === turnGraphic.id && currentPlayerDisplayName){
+            promptButtonArray("Select an action", generateTurnOptions(), generateTurnOptionCommands(), currentPlayerDisplayName);
+        }
+    },
+
     //Phase 1 of 3: "!combat roll initiative" - announce combat and enter the
     //staging phase. Tracker changes are IGNORED while staging, so initiative
     //rolls landing in the tracker don't fire spurious turn prompts.
