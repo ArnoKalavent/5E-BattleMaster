@@ -861,7 +861,12 @@ var BattleMaster = BattleMaster || (function() {
             currentlyCastingSpellRoll = rollData;
             log("Saving throw spell!");
             var playerID = findWhoIsControlling(target.associatedCharacter);
-            sendChat("BattleMaster", '/w "' + getObj('player',playerID).get("displayname") + '" Please roll a ' + rollData.saveType + ' saving throw for ' + target.get("name"));
+            var player = getObj('player', playerID);
+            var recipient = player ? '"' + player.get('displayname') + '"' : 'GM';
+            if(!player){
+                log("BattleMaster: No controlling player was resolvable for the saving throw; whispering GM.");
+            }
+            sendChat("BattleMaster", '/w ' + recipient + ' Please roll a ' + rollData.saveType + ' saving throw for ' + target.get("name"));
             listPlayerIDsWaitingOnRollFrom.push(playerID);
             listRollCallbackFunctions.push(SavingThrowAgainstDamageRollCallback);
             listTokensWaitingOnSavingThrowsFrom.push(target);
@@ -1005,7 +1010,12 @@ var BattleMaster = BattleMaster || (function() {
 
     spellEffects = function(token){
         var playerID = findWhoIsControlling(token.associatedCharacter);
-        sendChat("BattleMaster", '/w "' + getObj('player',playerID).get("displayname") + '" Please roll a ' + currentlyCastingSpellRoll.saveType + ' saving throw for ' + token.name);
+        var player = getObj('player', playerID);
+        var recipient = player ? '"' + player.get('displayname') + '"' : 'GM';
+        if(!player){
+            log("BattleMaster: No controlling player was resolvable for the saving throw; whispering GM.");
+        }
+        sendChat("BattleMaster", '/w ' + recipient + ' Please roll a ' + currentlyCastingSpellRoll.saveType + ' saving throw for ' + token.name);
         listPlayerIDsWaitingOnRollFrom.push(playerID);
         listRollCallbackFunctions.push(SavingThrowAgainstDamageRollCallback);
         listTokensWaitingOnSavingThrowsFrom.push(token);
@@ -1014,7 +1024,13 @@ var BattleMaster = BattleMaster || (function() {
     distanceToPixels = function(dist) {
 	    var PIX_PER_UNIT = 70;
 	    var page = getObj('page', Campaign().get('playerpageid'));
-	    return PIX_PER_UNIT * (dist/page.get('scale_number'));
+        var scale = page && Number(page.get('scale_number'));
+        if(!scale || !isFinite(scale) || scale < 0 || !isFinite(PIX_PER_UNIT * (dist/scale))){
+            // Default to the usual 5 units per square so missing page settings remain usable in arithmetic.
+            log("BattleMaster: Missing page or unusable scale_number; using 5 units per square.");
+            scale = 5;
+        }
+        return PIX_PER_UNIT * (dist/scale);
     },  
     
     findAllTokensInCone = function(origin, direction, range){
@@ -1270,6 +1286,10 @@ var BattleMaster = BattleMaster || (function() {
     
     SavingThrowAgainstDamageRollCallback = function(rollData){
         for(var i = 0; i < listTokensWaitingOnSavingThrowsFrom.length; i++){
+            if(!listTokensWaitingOnSavingThrowsFrom[i]){
+                log("BattleMaster: Empty saving-throw queue entry; skipping it.");
+                continue;
+            }
             if(findWhoIsControlling(listTokensWaitingOnSavingThrowsFrom[i].associatedCharacter) === rollData.playerid){
                 var token = listTokensWaitingOnSavingThrowsFrom[i];
                 break;
@@ -1334,16 +1354,19 @@ var BattleMaster = BattleMaster || (function() {
     
     applyDamage = function(dmgAmt, dmgType, targetToken, targetCharacter){
         log("Applying " + dmgAmt +" " +  dmgType + " damage to " + targetToken.get('name'));
+        if(!targetCharacter){
+            log("BattleMaster: No linked character for " + targetToken.get('name') + "; applying damage without immunities, resistances or vulnerabilities.");
+        }
         switch(state.sCharacterSheetType){
             case "OGL":
-                var immunitiesRaw = getAttrByName(targetCharacter.id,"npc_immunities"),
-                resistancesRaw = getAttrByName(targetCharacter.id,"npc_resistances"),
-                vulnerabilitiesRaw = getAttrByName(targetCharacter.id,"npc_vulnerabilities"); 
+                var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_immunities") : undefined,
+                resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_resistances") : undefined,
+                vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_vulnerabilities") : undefined;
             break;
             case "Shaped":
-                var immunitiesRaw = getAttrByName(targetCharacter.id,"damage_immunities"),
-                resistancesRaw = getAttrByName(targetCharacter.id,"damage_resistances"),
-                vulnerabilitiesRaw = getAttrByName(targetCharacter.id,"damage_vulnerabilities");
+                var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_immunities") : undefined,
+                resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_resistances") : undefined,
+                vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_vulnerabilities") : undefined;
                 if(!immunitiesRaw){immunitiesRaw="";}
                 if(!resistancesRaw){resistancesRaw="";}
                 if(!vulnerabilitiesRaw){vulnerabilitiesRaw="";}
