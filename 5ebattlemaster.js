@@ -764,12 +764,9 @@ var BattleMaster = BattleMaster || (function() {
     },
 
     universalizeString = function(string){
-        var tempString = string.toLowerCase();
-        tempString.trim();
-        while(tempString.indexOf(' ') != -1){
-            tempString = tempString.slice(0,tempString.indexOf(' ')) + tempString.slice(tempString.indexOf(' ') + 1);
-        }
-        return tempString
+        if(typeof string !== "string"){ return ""; }
+        var tempString = string.toLowerCase().trim();
+        return tempString.replace(/\s/g, "");
     },
     
     Move = function(){
@@ -1421,6 +1418,7 @@ var BattleMaster = BattleMaster || (function() {
             case "lightning": return "smoke";
             case "poison": return "slime";
             case "thunder": return "smoke";
+            default: return "magic";
         }
     },
     
