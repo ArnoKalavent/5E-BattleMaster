@@ -53,6 +53,22 @@ var BattleMaster = BattleMaster || (function() {
         sendChat("BattleMaster", '/w ' + recipient + ' ' + problem);
     }
 
+    function reportRefusedCommand(msg, problem){
+        var caller = getObj('player', msg.playerid);
+        var name = (caller && caller.get('displayname')) || msg.who;
+        var recipient = name ? '"' + name.replace(/"/g, '') + '"' : 'GM';
+        sendChat("BattleMaster", '/w ' + recipient + ' ' + problem);
+    }
+
+    function invokePendingCallback(msg, callback, beforeInvoke){
+        if(typeof callback !== 'function'){
+            reportRefusedCommand(msg, "There is nothing pending for that command.");
+            return;
+        }
+        beforeInvoke();
+        callback();
+    }
+
     // Template names are literal, even when they contain regex metacharacters.
     function extractTemplateText(content, fieldName){
         var escapedName = fieldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -475,6 +491,12 @@ var BattleMaster = BattleMaster || (function() {
         args = msg.content.split(/\s+/);//splits the message contents into discrete arguments
 		switch(args[0]) {
 		    case '!combat':
+                if(['weaponattack', 'directspell', 'aoespell', 'selectedTarget', 'tokenfromlist',
+                    'up', 'down', 'left', 'right', 'upright', 'downleft', 'upleft', 'downright'].indexOf(args[1]) !== -1 &&
+                    (!bInCombat || !currentTurnPlayer || !currentTurnToken || !currentTurnToken.token)){
+                    reportRefusedCommand(msg, "Combat is not running with a current turn.");
+                    return;
+                }
 		        switch(args[1]){
                     case 'cancel':
                         CancelPendingRolls(msg, args[2] === 'all');
@@ -504,25 +526,22 @@ var BattleMaster = BattleMaster || (function() {
                     break;
 		            case 'aoespell': AOESpellAttack(); 
                     break;
-                    case 'up': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
+                    case 'up':
+                    case 'down':
+                    case 'left':
+                    case 'right':
+                    case 'upright':
+                    case 'downleft':
+                    case 'upleft':
+                    case 'downright':
+                        invokePendingCallback(msg, bIsWaitingOnResponse ? responseCallbackFunction : undefined, function(){
+                            direction = args[1];
+                            bIsWaitingOnResponse = false;
+                            responseCallbackFunction = undefined;
+                        });
                     break;
-                    case 'down': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'left': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'right': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'upright': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'downleft': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'upleft': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'downright': direction = args[1]; bIsWaitingOnResponse = false; responseCallbackFunction();
-                    break;
-                    case 'selectedTarget': 
-                        findTokenAtTarget();
-                        selectedTokenCallbackFunction();
+                    case 'selectedTarget':
+                        invokePendingCallback(msg, selectedTokenCallbackFunction, findTokenAtTarget);
                     break;
                     case 'tokenfromlist':
                         target = listSelectableGraphics[args[2]];
