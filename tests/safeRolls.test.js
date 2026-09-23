@@ -23,11 +23,19 @@ var logs, chats, damage, bIsWaitingOnRoll, bIsWaitingOnResponse = false;
 var currentPlayerDisplayName, listPlayerIDsWaitingOnRollFrom, listRollCallbackFunctions;
 var listTokensWaitingOnSavingThrowsFrom, currentlyCastingSpellRoll;
 var state = { sCharacterSheetType: 'OGL' };
-var graphic = { get: function(k) { return k === 'name' ? 'Goblin' : 'character'; } };
+var graphicWrites;
+var graphic = {
+    get: function(k) { return k === 'name' ? 'Goblin' : 'character'; },
+    set: function(k, value) { graphicWrites.push([k, value]); }
+};
 var target = { ac: 12, name: 'Goblin', token: graphic, associatedCharacter: {}, get: graphic.get };
 function log(s) { logs.push(s); }
 function sendChat(who, s) { chats.push(s); }
-function applyDamage() { damage.push(Array.prototype.slice.call(arguments)); }
+function applyDamage(amount, type, token) {
+    damage.push(Array.prototype.slice.call(arguments));
+    // Exercise the write that crashes when a tokenWrapper reaches applyDamage.
+    token.set('bar2_value', amount);
+}
 function spawnFx() {}
 function getObj() { return { get: function() { return 'Defender'; } }; }
 function getAttrByName() { return 12; }
@@ -47,7 +55,7 @@ eval('HandleInput = function(msg_orig)' + extract('HandleInput = function(msg_or
 function roll(n) { return { results: { total: n } }; }
 function valid() { return { d20Rolls: [roll(18)], dmgRolls: [roll(8)], dmgTypes: ['fire'], dc: roll(14), saveEffects: 'half damage', saveType: 'dexterity', playerid: 'defender' }; }
 function reset(callback) {
-    logs = []; chats = []; damage = [];
+    logs = []; chats = []; damage = []; graphicWrites = [];
     bIsWaitingOnRoll = true; currentPlayerDisplayName = 'Caster';
     listPlayerIDsWaitingOnRollFrom = ['defender']; listRollCallbackFunctions = [callback];
     listTokensWaitingOnSavingThrowsFrom = [target]; currentlyCastingSpellRoll = valid();
@@ -100,9 +108,15 @@ expect('zero total is valid', safeRollTotal(roll(0)), 0);
         expect(prefix + ' no hit reported', chats.some(function(s) { return s.indexOf('Hit!') >= 0; }), false);
     });
     reset(fn); invoke(prefix + ' valid hit', fn, valid());
-    expect(prefix + ' unchanged damage', damage[0], [8, 'fire', index ? target : graphic, index ? getObj() : target.associatedCharacter]);
-    reset(fn); var two = valid(); two.dmgRolls.push(roll(3)); two.dmgTypes.push('cold'); fn(two);
+    expect(prefix + ' unchanged damage', damage[0], [8, 'fire', graphic, target.associatedCharacter]);
+    expect(prefix + ' valid hit writes Graphic', graphicWrites, [['bar2_value', 8]]);
+    reset(fn); var two = valid(); two.dmgRolls.push(roll(3)); two.dmgTypes.push('cold'); invoke(prefix + ' two component hit', fn, two);
     expect(prefix + ' two damage components', damage.map(function(d) { return d.slice(0, 2); }), [[8, 'fire'], [3, 'cold']]);
+    damage.forEach(function(d, component) {
+        expect(prefix + ' component ' + component + ' Graphic identity', d[2] === graphic, true);
+        expect(prefix + ' component ' + component + ' stored character identity', d[3] === target.associatedCharacter, true);
+    });
+    expect(prefix + ' both components write Graphic', graphicWrites, [['bar2_value', 8], ['bar2_value', 3]]);
     reset(fn); two.dmgRolls[1] = roll(0); fn(two); expect(prefix + ' zero secondary skipped', damage.length, 1);
     reset(fn); var miss = valid(); miss.d20Rolls = [roll(2)]; miss.dmgRolls = []; fn(miss);
     expect(prefix + ' miss no damage', damage.length, 0);

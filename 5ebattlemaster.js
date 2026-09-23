@@ -906,9 +906,9 @@ var BattleMaster = BattleMaster || (function() {
                     reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
                     return false;
                 }
-                applyDamage(damage, rollData.dmgTypes[0], target, getObj('character', target.get('represents')));
+                applyDamage(damage, rollData.dmgTypes[0], target.token, target.associatedCharacter);
                 if(secondaryDamage !== undefined && secondaryDamage != 0){
-                    applyDamage(secondaryDamage, rollData.dmgTypes[1], target, getObj('character', target.get('represents')));
+                    applyDamage(secondaryDamage, rollData.dmgTypes[1], target.token, target.associatedCharacter);
                 }
             }
         }
