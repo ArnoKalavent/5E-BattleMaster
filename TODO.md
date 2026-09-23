@@ -8,6 +8,215 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 ---
 
+## Code audit, 2026-09-23 — six-subsystem parallel sweep
+
+Six agents read the file in full, one subsystem each, against one rubric:
+works / broken / never implemented, plus unguarded lookups, dead code,
+replicated patterns and test coverage. Every claim was cited to a line, and the
+load-bearing ones were re-verified independently, several by executing the
+extracted functions. This section is the map; individual repairs get their own
+TODO items.
+
+### What actually works
+
+Of the five actions the turn menu offers, **one works end to end**: the weapon
+attack (with AC coerced from a string, see below). Sphere AOEs work but include
+the caster. Everything else is broken, unreachable, or was never written.
+
+### Table-killers — an uncaught exception disables the Mod sandbox for everyone
+
+- **Direct spell damage.** `DirectSpellRollCallback` passes `target` (a
+  `tokenWrapper`) where `applyDamage` needs a Graphic. The wrapper proxies
+  `get` but has no `set`, so the first `targetToken.set('bar2_value', ...)`
+  throws. Any successful direct spell attack that deals damage kills the table.
+  `WeaponAttack` passes `target.token` correctly - two conventions for one call.
+- **Nine unguarded callback invocations.** The eight direction arms and
+  `selectedTarget` call `responseCallbackFunction()` /
+  `selectedTokenCallbackFunction()` with no existence check and no `bInCombat`
+  gate. `!combat up` typed cold, or a click on a stale chat button, throws.
+  `!combat cancel` nulls the callback while the "Target selected" button remains
+  in the log, so cancel makes this trivially reachable.
+- **`currentTurnPlayer.id` / `currentTurnToken.token` dereferenced unguarded**
+  in `promptTarget`, `WeaponAttack`, `DirectSpellAttack`, `AOESpellAttack`.
+  Reachable before combat starts, after `!combat end`, and after any
+  `TurnChange` early return.
+- **`dmgTypeToFXName(undefined)`** reaches `universalizeString(undefined)` →
+  `.toLowerCase()` on undefined. Fires on any AOE with no damage roll (Fog
+  Cloud, or Auto Roll Damage off). Three call sites, none guarded.
+- **`targetCharacter.id` in `applyDamage`** - undefined for an unlinked token,
+  and `TurnChange` puts every tracker token into the encounter list regardless
+  of linkage.
+- **`distanceToPixels`** dereferences `getObj('page', ...)` unguarded, once per
+  token per cast.
+- **DeathMarkersPlus.** `DMPConfig` stores `args[2]` as a STRING, so `"false"`
+  is truthy and BOTH buttons enable it. `Deathmarkers` does not exist, so the
+  next damage application throws `ReferenceError`. It persists in `state`, so it
+  re-arms on every sandbox restart, and there is no way to disable it from chat.
+
+### Silently wrong — no crash, wrong outcome, no message
+
+- **Cone and line AOEs are inert.** `spellEffects` queues saving-throw
+  expectations without setting `bIsWaitingOnRoll`, which is recomputed only
+  inside the interception branch. Every defender's save hits the early-return
+  guard and is ignored. No save against a cone or line AOE has ever been
+  adjudicated. Sphere escapes only because it resolves inside the callback.
+- **Save-for-half applies zero damage.** The code does exact equality on
+  `universalizeString(savedesc) === "halfdamage"`; the README says the field must
+  *contain* "half damage". A real "Half damage on a successful save"
+  universalises to "halfdamageonasuccessfulsave" and falls to `default: break;`.
+- **Cone `downleft` has zero area.** One wrong sign flag (`bLine2XNeg` should be
+  false). Measured: 14 lattice points versus 830 for `upright`. A Southwest cone
+  hits nothing.
+- **Line `upleft` and `downleft` use each other's axis.** Measured: `upleft`
+  returns down-left tokens and `downleft` returns up-left tokens.
+- **AC is an unvalidated string.** `""` coerces to 0 → the token ALWAYS gets
+  hit; `undefined` → NEVER hit; `"15 (natural armor)"` → NaN → never hit. Also
+  `npcd_ac` was removed from the sheet around 2017, so the primary lookup always
+  misses and falls back to the PC-side `ac` field.
+- **Empty damage type matches every immunity.** `"".indexOf("")` is 0, so a
+  template with no `dmg1type` makes every creature immune and the hit vanishes.
+- **Resistance rounds the wrong way.** `Math.round(dmgAmt/2)` rounds .5 up; 5e
+  rounds down. Every odd resisted total is 1 too high.
+- **Blank bars corrupt silently.** `"" >= 0` is true, so a token with no temp-HP
+  bar takes the temp-HP path and gets 0 written into it. `"" - N` sends HP
+  straight negative. Non-numeric bar text writes `NaN` to the bar, persistently.
+- **Sphere AOEs include the caster**, who is whispered to save against their own
+  spell.
+- **Crits are parsed and discarded.** `crit1Index` is extracted and never read;
+  `critRolls`/`critTypes` are initialised and never populated. The sheet setting
+  the README requires is what fills the field the script throws away.
+- **Advantage is parsed and discarded.** `r2` is pushed into `d20Rolls[1]`;
+  every consumer reads `[0]` only.
+- **AOE size is never validated.** `self cone 15ft` or a missing size yields
+  `NaN`, so nothing is hit and nothing is said. Leading whitespace in the range
+  also rejects an otherwise-correct string.
+- **`SheetConfig` accepts anything** with no validation and no confirmation. Any
+  value other than "OGL"/"Shaped" makes `rollData` parse nothing and
+  `applyDamage` skip all resistance handling - silently, and persisted.
+- **`tokenfromlist` does nothing.** Choosing from the disambiguation prompt
+  assigns a raw Graphic (not a wrapper) and never re-invokes the action. The
+  wrong type then makes every weapon attack a guaranteed miss.
+- **Multi-candidate targeting fires the action anyway.** `findTokenAtTarget`
+  prompts and deliberately leaves `target` stale; `selectedTarget` then runs the
+  attack immediately against the previous target. This is the most likely
+  mechanism behind the live "reticle on a PC, monster gets attacked" bug - the
+  discriminator is whether a "Which token are you targeting?" prompt appeared.
+- **Saving-throw rejections are whispered to the caster**, not the defender who
+  must reroll, so the defender is held in an expectation they never learn about.
+- **Dispatch is by player id alone**, always finding the OLDEST expectation, so
+  a player owing two rolls has either one adjudicated as the other.
+
+### Never implemented, but shipped as features
+
+- **Move** - `case 'move':` is an empty `break;`, `Move` is never called,
+  `BuildMovementWalls` is an empty body, `iXStart`/`iYStart`/`iMoveSpeed*` are
+  written and never read. A live "Move" button appears in every turn prompt and
+  does nothing, silently.
+- **Cube and cylinder AOEs** - `findAllTokensInCube` is an empty body;
+  `findAllTokensInCylinder` is a verbatim copy of the sphere that ignores its
+  `height` parameter.
+- **`ResetCharacterTurnValues`** - empty body, called every turn as though it
+  reset per-character state.
+- **Action economy** - `bHasTakenAction` / `bHasTakenBonusAction` /
+  `bHasTakenReaction` are initialised and never read or written.
+- **`bIsMook` / `bIsPlayer`** - bare expression statements, not assignments. The
+  properties never exist.
+- **`IsWithinRange`** - never called, and returns false unconditionally: three
+  independent bugs in eight lines, including `if(rangeString = "")`.
+- **Native status markers** - no `statusmarkers` reference anywhere. Nothing
+  marks dead, unconscious or bloodied.
+
+### Systemic patterns — the repair-versus-rewrite evidence
+
+Each of these is one mistake replicated, so each is a design problem rather than
+N bugs.
+
+1. **Ambient mutable globals as the parameter-passing mechanism.** `target`,
+   `currentTurnToken`, `currentTurnPlayer`, `currentlyCastingSpellRoll`,
+   `direction`, `range`, `selectedTokenCallbackFunction`. Written in one chat
+   message, read in another an arbitrary time later, with no correlation to who
+   clicked or which prompt it answers. Root cause of the stale target, the
+   wrong-recipient whispers, the cross-turn identity bleed and the
+   prompt-ownership confusion.
+2. **`target` has three incompatible consumer contracts** - wrapper, raw
+   Graphic, and the saving-throw queue's expectations. No path satisfies all
+   three, and `tokenWrapper`'s `get` proxy makes the two types look
+   interchangeable right up to the first `.set`.
+3. **Five hand-rolled tracker fetch-and-parse sites**, each re-deciding the
+   falsy check and whether to try/catch. `TurnChange` alone reads it four times
+   and parses three.
+4. **Phase teardown written three times with three different field sets**
+   (`StageInitiative`, `EndCombat`, `CancelPendingRolls`), which is exactly why
+   the orphaned reticle and the stale roll queues each appear in only one.
+5. **Seventy-two hand-chosen signs and literals** across the two eight-way
+   geometry switches, with no structural cross-check. Both geometry bugs live
+   there.
+6. **Whisper strings built by concatenation at ~14 sites**, three different
+   quoting conventions, only one that escapes.
+7. **Parallel arrays kept in sync by hand** at five push sites with two
+   different orderings, plus `generateTurnOptions`/`generateTurnOptionCommands`.
+8. **`state.sCharacterSheetType` re-interpreted at four independent sites** with
+   four different failure modes, because `rollData` exports a sheet-dependent
+   shape instead of normalising at the boundary.
+
+### Test-suite integrity — read this before repairing anything
+
+The suite is large and green, and it is measuring stubs where the real logic
+lives.
+
+**Stubbed out, so their defects are structurally invisible:** `applyDamage`
+(every crash, all resistance logic, all bar arithmetic), `TurnChange` (replaced
+by a counter double), `tokenWrapper`, `promptButtonArray`, `makeButton`,
+`dmgTypeToFXName`, `spellEffects`, `distanceToPixels`, `getAttrByName` (stubbed
+to `return 12`, so it cannot express `""` or `undefined`), and `rollData` itself
+in the callback tests.
+
+**Tests that assert the buggy behaviour as correct** - these will FAIL when the
+bugs are fixed, by design:
+- `safeRolls.test.js` asserts the save rejection whispers "Caster" - the
+  mis-addressed message that strands the defender.
+- `safeRolls.test.js` asserts `applyDamage` receives the wrapper that would
+  crash it, with `applyDamage` stubbed.
+- `aoeSpell.test.js` asserts the real sheet's `Self (15-foot cone)` is REJECTED.
+- `targeting.test.js` asserts the stale-`target` state during multi-candidate
+  disambiguation.
+- `lineAoe.test.js` pins the hard-coded 35px offset and the 20px tolerance as
+  intended.
+- `rollParser.test.js` asserts an invalid sheet type is preserved, locking in
+  `SheetConfig`'s lack of validation, and pins `critRolls === []` under the name
+  "existing critical array behavior".
+
+The pattern: the parser has a genuinely adversarial test suite; every consumer
+of the parser is tested against a stub that can only emit well-formed values.
+All three sandbox-killing crashes live in exactly that gap.
+
+### Recommendation
+
+Repair the boundaries, rewrite the action layer.
+
+**Keep:** the parser and its extractors (well designed, well tested), the
+`safeRollTotal` / `reportMissingRoll` guards, the build-rev stamping, the
+review-freshness tooling, `findCurrentTurnToken`, `ConfigureReticle`.
+
+**Rewrite rather than patch:** the action layer - targeting, the roll
+expectation queue, and the attack/spell callbacks. Its defects are not
+independent; they all descend from passing state through module globals and from
+`target` having no single type. Patching them one at a time is what the last
+several days have been, and each fix has been correct without reducing the rate
+of new findings.
+
+**Fix immediately regardless of that decision**, because they are cheap and they
+take the table down:
+1. the nine unguarded callback invocations, plus a `bInCombat` gate on the
+   action arms
+2. the `applyDamage` wrapper-versus-Graphic argument at the direct-spell site
+3. the DeathMarkersPlus removal - the `"false"` string bug makes it a live time
+   bomb
+4. `dmgTypeToFXName` / `universalizeString` undefined guards
+
+**Do not trust a green suite on this file** until the stubs above are replaced
+with real objects.
+
 ## Phase 0 — Documentation ✅ COMPLETE
 
 - [x] Audit code for undocumented setup assumptions
