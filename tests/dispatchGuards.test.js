@@ -124,7 +124,7 @@ reset(); callerName = 'Alice "Brave"'; command('up'); expect('quotes sanitized',
     ['roll', 'stage'], ['start', 'stage'], ['begin round 1', 'begin round 1'],
     ['end', 'end'], ['stop', 'end'], ['cancel', 'cancel false'], ['cancel all', 'cancel true'],
     ['set reticle URL', 'reticle'], ['reticleconfig URL', 'reticle'],
-    ['config', 'config'], ['DMPConfig', 'config'], ['SheetConfig', 'config']
+    ['config', 'config'], ['DMPConfig', ''], ['SheetConfig', 'config']
 ].forEach(function(pair) {
     reset(); bInCombat = false; currentTurnPlayer = currentTurnToken = undefined;
     command(pair[0], 'Alice');

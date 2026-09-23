@@ -33,9 +33,6 @@ var BattleMaster = BattleMaster || (function() {
             }
         },
     templates = {};
-    if(!state.bDeathMarkersPlusInstalled){
-        state.bDeathMarkersPlusInstalled = false;
-    }
     if(!state.sCharacterSheetType){
         state.sCharacterSheetType = "OGL";
     }
@@ -562,20 +559,7 @@ var BattleMaster = BattleMaster || (function() {
                         if(msg.who.indexOf(" (GM)") != -1){
                             s = s.substring(0,s.indexOf(" (GM)"));
                         }
-                        promptButtonArray("5E BattleMaster Config", ["DeathMarkersPlus","Character Sheet"], ["DMPConfig", "SheetConfig"], s);
-                    break;
-                    case "DMPConfig":
-                        var s = msg.who; 
-                        if(msg.who.indexOf(" (GM)") != -1){
-                            s = s.substring(0,s.indexOf(" (GM)"));
-                        }
-                        if(args[2]){
-                            state.bDeathMarkersPlusInstalled = args[2];
-                            sendChat('BattleMaster', '/w "' + s + '" Deathmarkersplus compatibility set to ' + state.bDeathMarkersPlusInstalled);
-                        }
-                        else{
-                            promptButtonArray("DeathMarkersPlus Compatibility",["On", "Off"],["DMPConfig true", "DMPConfig false"], s);
-                        }
+                        promptButtonArray("5E BattleMaster Config", ["Character Sheet"], ["SheetConfig"], s);
                     break;
                     case "SheetConfig":
                         if(args[2]){
@@ -1370,9 +1354,6 @@ var BattleMaster = BattleMaster || (function() {
         }
         var tempHP = targetToken.get('bar2_value');
         if(immunitiesRaw != undefined && universalizeString(immunitiesRaw).indexOf(universalizeString(dmgType)) != -1){
-            if(state.bDeathMarkersPlusInstalled){
-                Deathmarkers.UpdateDeathMarkers(targetToken);
-            }
             return;
         } 
         else if(tempHP >= 0){
@@ -1384,9 +1365,6 @@ var BattleMaster = BattleMaster || (function() {
                     targetToken.set('bar2_value', 0);
                     var dmgLeft = Math.round(2*dmgAmt) - tempHP;
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
-                }
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
                 }
                 return;
             }
@@ -1400,9 +1378,6 @@ var BattleMaster = BattleMaster || (function() {
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
                 }
                 
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
-                }
                 return;
             }
             else{
@@ -1414,33 +1389,21 @@ var BattleMaster = BattleMaster || (function() {
                     var dmgLeft = dmgAmt - tempHP;
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
                 }
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
-                }
                 return;
             }
         }
         else{
             if(vulnerabilitiesRaw != undefined && universalizeString(vulnerabilitiesRaw).indexOf(universalizeString(dmgType)) != -1){
                 targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(2*dmgAmt));
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
-                }
                 return;
             }
             else if(resistancesRaw != undefined && universalizeString(resistancesRaw).indexOf(universalizeString(dmgType)) != -1){
                 log(targetCharacter.get('name') + " has resistance to " + dmgType +" damage!")
                 targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(dmgAmt/2));
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
-                }
                 return;
             }
             else{
                 targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(dmgAmt));
-                if(state.bDeathMarkersPlusInstalled){
-                    Deathmarkers.UpdateDeathMarkers(targetToken);
-                }
                 return;
             }
         }
