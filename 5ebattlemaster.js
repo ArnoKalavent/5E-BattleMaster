@@ -387,15 +387,27 @@ var BattleMaster = BattleMaster || (function() {
 	},
     
     findTokenAtTarget = function(){
+        listSelectableGraphics = [];
+        var recipient = currentPlayerDisplayName ? '"' + currentPlayerDisplayName + '"' : 'GM';
         var reticleToken = getObj("graphic",reticleTokenId);
         if(reticleToken){
+            var testedEntries = 0;
+            var reticleLeft = reticleToken.get('left'), reticleTop = reticleToken.get('top');
             log("Reticle token isn't null!");
-            _.each(JSON.parse(Campaign().get('turnorder')), function(entry){
+            var turnorder = Campaign().get('turnorder');
+            var parsed;
+            try {
+                parsed = turnorder ? JSON.parse(turnorder) : [];
+            } catch (e) {
+                parsed = [];
+            }
+            _.each(parsed, function(entry){
                 //Skip custom entries (id "-1") and deleted tokens - only real
                 //tokens can be targeted.
                 if(entry.id === "-1" || entry.id === -1){ return; }
                 var token = getObj('graphic', entry.id);
                 if(!token){ return; }
+                testedEntries++;
                 log("Testing token " + token.id);
                 log("Token coords: (" + token.get('left') + ", " + token.get('top'));
                 log("Reticle coords: (" + reticleToken.get('left') + ", " + reticleToken.get('top'));
@@ -423,11 +435,14 @@ var BattleMaster = BattleMaster || (function() {
                 log("Target:" + target);
             }
             else{
-                log("List of potential targets is null!");
+                target = undefined;
+                log("BattleMaster: No target found; tested " + testedEntries + " turn-tracker entries; reticle coordinates: (" + reticleLeft + ", " + reticleTop + ").");
+                sendChat("BattleMaster", '/w ' + recipient + ' Nothing was found under the reticle. Only combatants in the turn tracker can be targeted.');
             }
         }
         else{
-
+            target = undefined;
+            sendChat("BattleMaster", '/w ' + recipient + ' The targeting reticle was lost. Please try the action again.');
         }
     };
 
