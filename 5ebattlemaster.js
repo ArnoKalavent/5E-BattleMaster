@@ -854,8 +854,12 @@ var BattleMaster = BattleMaster || (function() {
         var rangeString = rollData.rangeString,
         x = currentTurnToken.token.get('left'), y = currentTurnToken.token.get('top'),
         args = rangeString.toLowerCase().split(/\s+/);
+        log("AOE spell range: " + rangeString);
         if(args[0]!= "self"){
             log("Not self targeted!");
+            reportMissingRoll(rangeString === ""
+                ? "The spell range was missing or empty in the roll; only self-origin AOE spells (cone, line, sphere) are supported."
+                : 'The spell range was read as "' + rangeString + '"; only self-origin AOE spells (cone, line, sphere) are supported.');
         }
         else{
             switch(args[1]){
@@ -880,8 +884,13 @@ var BattleMaster = BattleMaster || (function() {
                     spawnFx(x,y,effectType);
                     _.each(findAllTokensInSphere(createLocFromToken(currentTurnToken.token),args[2]), spellEffects)
                 break;
-                case "cube": break;
-                case "cylinder": break;
+                case "cube":
+                case "cylinder":
+                    reportMissingRoll('The AOE shape "' + (args[1] || 'unknown') + '" is not implemented yet; supported self-origin shapes are cone, line, and sphere.');
+                break;
+                default:
+                    reportMissingRoll('The spell range "' + rangeString + '" could not be interpreted; expected "self <shape> <size>"; supported self-origin shapes are cone, line, and sphere.');
+                break;
             }
         }
         return true;
