@@ -368,6 +368,16 @@ each was found and have since shifted.
       inline rolls from a prompted player aren't swallowed
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
+- [ ] **Damage-only riders (Divine Smite and similar).** Found live 2026-09-23.
+      Divine Smite is not a spell attack: it has no to-hit roll and no saving
+      throw, it is extra radiant damage on a melee hit already made. Its roll
+      message carries `dmg1` and no `r1`. The Direct Spell path requires a
+      to-hit roll, so it correctly rejects the roll - but the script has no
+      concept of "extra damage applied to an existing hit" at all. Supporting it
+      means a new action type, not a tweak. Deferred deliberately to avoid scope
+      creep. NOTE: before the guards in 0829f8a this case read
+      `rollData.d20Rolls[0].results.total` on an empty array and would have
+      taken the sandbox down - a second table-killer nobody had anticipated.
 - [ ] **Script-wide assumption: combat happens on the player ribbon page.**
       Raised by review of the `spawnFx` fix (2026-09-19). Every page-dependent
       call resolves the page as `Campaign().get('playerpageid')` — the reticle's
