@@ -26,7 +26,6 @@ function extract(decl) {
         (src.match(new RegExp(name, 'gi')) || []).length, 0);
 });
 
-var state = { sCharacterSheetType: 'OGL' };
 var attributes = {};
 function log() {}
 function getAttrByName(id, name) { return attributes[name]; }
@@ -63,20 +62,6 @@ var character = { id: 'target-character', get: function() { return 'Target'; } }
     expect(test.name + ' preserves bar write order and values', token.writes, test.writes);
     expect(test.name + ' updates temp HP', token.get('bar2_value'), test.temp === undefined ? undefined : 0);
 });
-
-var bIsWaitingOnRoll = false, bIsWaitingOnResponse = false;
-var prompts = [];
-function promptButtonArray(title, labels, commands, recipient) {
-    prompts.push({ title: title, labels: labels, commands: commands, recipient: recipient });
-}
-HandleInput({ type: 'api', content: '!combat config', who: 'Alice (GM)' });
-expect('config opens exactly one menu', prompts.length, 1);
-expect('config retains Character Sheet and its command', prompts[0], {
-    title: '5E BattleMaster Config', labels: ['Character Sheet'], commands: ['SheetConfig'], recipient: 'Alice'
-});
-expect('config label and command arrays stay aligned', prompts[0].labels.length, prompts[0].commands.length);
-HandleInput({ type: 'api', content: '!combat ' + prompts[0].commands[0], who: 'Alice' });
-expect('Character Sheet button opens sheet choices', prompts[1].commands, ['SheetConfig OGL', 'SheetConfig Shaped']);
 
 if (failures) { process.exit(1); }
 console.log('\nAll tests passed.');

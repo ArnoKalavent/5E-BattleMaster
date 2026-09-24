@@ -61,8 +61,8 @@ function refused(action, reason) {
 var nothing = 'There is nothing pending for that command.';
 var noCombat = 'Combat is not running with a current turn.';
 var directions = ['up', 'down', 'left', 'right', 'upright', 'downleft', 'upleft', 'downright'];
-var unknown = 'Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle, !combat config.';
-['aoespell', 'move'].concat(directions).forEach(function(action) {
+var unknown = 'Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle.';
+['aoespell', 'move', 'config', 'SheetConfig'].concat(directions).forEach(function(action) {
     [true, false].forEach(function(inCombat) {
         reset(); bInCombat = inCombat;
         command(action);
@@ -70,6 +70,7 @@ var unknown = 'Unknown command. Available: !combat begin, !combat end, !combat c
         expect(action + ' whispers Unknown command to caller', chats[0], '/w "Alice" ' + unknown);
     });
 });
+expect('unknown-command help does not advertise config', /config/i.test(chats[0]), false);
 [undefined, null, 42].forEach(function(callback) {
     reset(); selectedTokenCallbackFunction = callback; refused('selectedTarget', nothing);
 });
@@ -101,7 +102,7 @@ reset(); callerName = 'Alice "Brave"'; command('selectedTarget'); expect('quotes
     ['roll', 'stage'], ['start', 'stage'], ['begin round 1', 'begin round 1'],
     ['end', 'end'], ['stop', 'end'], ['cancel', 'cancel false'], ['cancel all', 'cancel true'],
     ['set reticle URL', 'reticle'], ['reticleconfig URL', 'reticle'],
-    ['config', 'config'], ['DMPConfig', ''], ['SheetConfig', 'config']
+    ['DMPConfig', '']
 ].forEach(function(pair) {
     reset(); bInCombat = false; currentTurnPlayer = currentTurnToken = undefined;
     command(pair[0], 'Alice');

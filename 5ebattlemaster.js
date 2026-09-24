@@ -30,9 +30,6 @@ var BattleMaster = BattleMaster || (function() {
             }
         },
     templates = {};
-    if(!state.sCharacterSheetType){
-        state.sCharacterSheetType = "OGL";
-    }
     // Inline rolls may be absent, or occupy an array slot without an entry.
     function safeRollTotal(entry){
         if(!entry || !entry.results || typeof entry.results.total !== 'number' || !isFinite(entry.results.total)){
@@ -95,47 +92,20 @@ var BattleMaster = BattleMaster || (function() {
         this.rangeString = "";
         this.saveType = "";
         this.saveEffects = "";
-        switch(state.sCharacterSheetType){
-            case "OGL":
-                r1Index = extractInlineRollIndex(rollMsg.content, 'r1');
-                r2Index = extractInlineRollIndex(rollMsg.content, 'r2');
-                saveDCIndex = extractInlineRollIndex(rollMsg.content, 'savedc');
-                dmg1Index = extractInlineRollIndex(rollMsg.content, 'dmg1');
-                //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');
-                crit1Index = extractInlineRollIndex(rollMsg.content, 'crit1');
-                //crit2Index = extractInlineRollIndex(rollMsg.content, 'crit2');
-                dmgType1 = extractTemplateText(rollMsg.content, 'dmg1type');
-                //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');
-                this.rangeString = extractTemplateText(rollMsg.content, 'range') || "";
-                saveType = extractTemplateText(rollMsg.content, 'saveattr');
-                this.bRequiresSavingThrow = saveType !== undefined;
-                this.saveType = saveType || "";
-                this.saveEffects = extractTemplateText(rollMsg.content, 'savedesc') || "";
-            break;
-            case "Shaped":
-                saveType = extractTemplateText(rollMsg.content, 'saving_throw_vs_ability');
-                this.bRequiresSavingThrow = saveType !== undefined;
-                this.saveType = saveType || "";
-                if(this.bRequiresSavingThrow){
-                    dmg1Index = extractInlineRollIndex(rollMsg.content, 'saving_throw_damage');
-                    dmgType1 = extractTemplateText(rollMsg.content, 'saving_throw_damage_type');
-                    var saveDC = parseInt(extractTemplateText(rollMsg.content, 'saving_throw_dc'), 10);
-                    this.dc = isNaN(saveDC) ? undefined : saveDC;
-                }
-                else if(extractTemplateText(rollMsg.content, 'attack1') !== undefined){
-                    r1Index = extractInlineRollIndex(rollMsg.content, 'attack1');
-                    dmg1Index = extractInlineRollIndex(rollMsg.content, 'attack_damage');
-                    dmg2Index = extractInlineRollIndex(rollMsg.content, 'attack_second_damage');
-                    crit1Index = extractInlineRollIndex(rollMsg.content, 'attack_damage_crit');
-                    crit2Index = extractInlineRollIndex(rollMsg.content, 'attack_second_damage_crit');
-                    dmgType1 = extractTemplateText(rollMsg.content, 'attack_damage_type');
-                    dmgType2 = extractTemplateText(rollMsg.content, 'attack_second_damage_type');
-                }
-                else{
-                    r1Index = extractInlineRollIndex(rollMsg.content, 'roll1');
-                }
-            break;
-        }
+        r1Index = extractInlineRollIndex(rollMsg.content, 'r1');
+        r2Index = extractInlineRollIndex(rollMsg.content, 'r2');
+        saveDCIndex = extractInlineRollIndex(rollMsg.content, 'savedc');
+        dmg1Index = extractInlineRollIndex(rollMsg.content, 'dmg1');
+        //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');
+        crit1Index = extractInlineRollIndex(rollMsg.content, 'crit1');
+        //crit2Index = extractInlineRollIndex(rollMsg.content, 'crit2');
+        dmgType1 = extractTemplateText(rollMsg.content, 'dmg1type');
+        //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');
+        this.rangeString = extractTemplateText(rollMsg.content, 'range') || "";
+        saveType = extractTemplateText(rollMsg.content, 'saveattr');
+        this.bRequiresSavingThrow = saveType !== undefined;
+        this.saveType = saveType || "";
+        this.saveEffects = extractTemplateText(rollMsg.content, 'savedesc') || "";
         if(r1Index !== undefined && inlineData[r1Index]){this.d20Rolls.push(inlineData[r1Index]);}
         if(r2Index !== undefined && inlineData[r2Index]){this.d20Rolls.push(inlineData[r2Index]);}
         if(saveDCIndex !== undefined && inlineData[saveDCIndex]){this.dc = inlineData[saveDCIndex];}
@@ -522,27 +492,8 @@ var BattleMaster = BattleMaster || (function() {
                     case 'reticleconfig': //legacy alias
                         ConfigureReticle(msg, args[2]);
                     break;
-                    case "config":
-                        var s = msg.who; 
-                        if(msg.who.indexOf(" (GM)") != -1){
-                            s = s.substring(0,s.indexOf(" (GM)"));
-                        }
-                        promptButtonArray("5E BattleMaster Config", ["Character Sheet"], ["SheetConfig"], s);
-                    break;
-                    case "SheetConfig":
-                        if(args[2]){
-                            state.sCharacterSheetType = args[2];
-                        }
-                        else{
-                            var s = msg.who; 
-                            if(msg.who.indexOf(" (GM)") != -1){
-                                s = s.substring(0,s.indexOf(" (GM)"));
-                            }
-                            promptButtonArray("Character Sheet Type",["OGL", "Shaped"],["SheetConfig OGL", "SheetConfig Shaped"], s);
-                        }
-                    break;
 		            default:
-                        reportRefusedCommand(msg, "Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle, !combat config.");
+                        reportRefusedCommand(msg, "Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle.");
                     break;
 		        }break;
 		}
@@ -784,7 +735,7 @@ var BattleMaster = BattleMaster || (function() {
     DirectSpellRollCallback = function(rollData){
         if(rollData.bRequiresSavingThrow){
             var spellDamage = safeRollTotal(rollData.dmgRolls[0]);
-            var spellDC = state.sCharacterSheetType === "OGL" ? safeRollTotal(rollData.dc) : rollData.dc;
+            var spellDC = safeRollTotal(rollData.dc);
             if(spellDamage === undefined){
                 reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
                 return false;
@@ -880,7 +831,7 @@ var BattleMaster = BattleMaster || (function() {
         var rollEffectsDesc = currentlyCastingSpellRoll.saveEffects,
         rollDmg = safeRollTotal(currentlyCastingSpellRoll.dmgRolls[0]),
         rollDmgType = currentlyCastingSpellRoll.dmgTypes[0],
-        rollDC = state.sCharacterSheetType === "OGL" ? safeRollTotal(currentlyCastingSpellRoll.dc) : currentlyCastingSpellRoll.dc;
+        rollDC = safeRollTotal(currentlyCastingSpellRoll.dc);
         if(typeof rollDC !== "number" || !isFinite(rollDC)){
             reportMissingRoll("The spell save DC was not present in the message or was unreadable; ask the caster to recast the spell with its save DC included.");
             //Caster-fault: the player receiving this cannot fix it by rolling
@@ -921,21 +872,9 @@ var BattleMaster = BattleMaster || (function() {
         if(!targetCharacter){
             log("BattleMaster: No linked character for " + targetToken.get('name') + "; applying damage without immunities, resistances or vulnerabilities.");
         }
-        switch(state.sCharacterSheetType){
-            case "OGL":
-                var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_immunities") : undefined,
-                resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_resistances") : undefined,
-                vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_vulnerabilities") : undefined;
-            break;
-            case "Shaped":
-                var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_immunities") : undefined,
-                resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_resistances") : undefined,
-                vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"damage_vulnerabilities") : undefined;
-                if(!immunitiesRaw){immunitiesRaw="";}
-                if(!resistancesRaw){resistancesRaw="";}
-                if(!vulnerabilitiesRaw){vulnerabilitiesRaw="";}
-            break;
-        }
+        var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_immunities") : undefined,
+        resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_resistances") : undefined,
+        vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_vulnerabilities") : undefined;
         var tempHP = targetToken.get('bar2_value');
         if(immunitiesRaw != undefined && universalizeString(immunitiesRaw).indexOf(universalizeString(dmgType)) != -1){
             return;

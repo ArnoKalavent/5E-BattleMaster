@@ -36,9 +36,9 @@ expect('temp HP absorbs all damage without writing HP', function() {
     return f.token.writes;
 }, [['bar2_value', 3]]);
 
-['OGL', 'Shaped'].forEach(function(sheet) {
-    var prefix = sheet === 'OGL' ? 'npc_' : 'damage_';
-    var other = sheet === 'OGL' ? 'damage_' : 'npc_';
+['OGL'].forEach(function(sheet) {
+    var prefix = 'npc_';
+    var other = 'damage_';
     [undefined, 3, 20].forEach(function(temp) {
         ['immunities', 'vulnerabilities', 'resistances'].forEach(function(kind) {
             var attrs = {};
@@ -119,9 +119,8 @@ expect('DEFECT empty damage type matches non-empty immunity', function() {
 expect('DEFECT empty damage type matches empty immunity before resistance', function() {
     return fixture('OGL', { npc_immunities: '', npc_resistances: 'fire' }, 0, 20).hit(6, '');
 }, [0, 20]);
-// DEFECT: the requested non-OGL fallback would use damage_resistances and
-// leave 17 HP; currently only the literal 'Shaped' setting reads damage_*.
-expect('DEFECT custom sheet skips damage_* attributes', function() {
-    return fixture('custom', { damage_resistances: 'fire' }, 0, 20).hit(6, 'fire');
-}, [0, 14]);
+// A stale persisted setting cannot disable OGL resistance handling.
+expect('resistance applies regardless of leftover state value', function() {
+    return fixture('custom', { npc_resistances: 'fire' }, 0, 20).hit(6, 'fire');
+}, [0, 17]);
 process.exitCode = failures ? 1 : 0;

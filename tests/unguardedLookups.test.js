@@ -27,7 +27,7 @@ function invoke(name, fn) {
 var logs, chats, page, player, controller, target, attrReads;
 var listPlayerIDsWaitingOnRollFrom, listRollCallbackFunctions, listTokensWaitingOnSavingThrowsFrom;
 var currentlyCastingSpellRoll, currentPlayerDisplayName = 'Caster';
-var state = { sCharacterSheetType: 'OGL' };
+var state = {};
 function log(s) { logs.push(s); }
 function sendChat(who, s) { chats.push(s); }
 function getObj(type) { return type === 'page' ? page : player; }
@@ -55,7 +55,6 @@ function reset() {
     logs = []; chats = []; attrReads = [];
     page = undefined; player = undefined; controller = undefined;
     listPlayerIDsWaitingOnRollFrom = []; listRollCallbackFunctions = []; listTokensWaitingOnSavingThrowsFrom = [];
-    state.sCharacterSheetType = 'OGL';
     target = { name: 'Goblin', associatedCharacter: { id: 'character' }, token: graphic(0), get: function() { return 'Goblin'; } };
     currentlyCastingSpellRoll = { bRequiresSavingThrow: true, dmgRolls: [roll(8)], dmgTypes: ['fire'], dc: roll(14), saveType: 'dexterity', saveEffects: 'half damage' };
 }
@@ -86,9 +85,9 @@ function reset() {
         expect('controller queue unchanged ' + i, listPlayerIDsWaitingOnRollFrom, [controller]);
     });
 });
-['OGL', 'Shaped'].forEach(function(sheet) {
+['OGL'].forEach(function(sheet) {
     [0, 3, 10, -1].forEach(function(tempHP) {
-        reset(); state.sCharacterSheetType = sheet;
+        reset();
         var token = graphic(tempHP);
         var result = invoke(sheet + ' unlinked target temp HP ' + tempHP, function() { return applyDamage(8, 'fire', token, undefined); });
         expect('damage return unchanged', result, undefined);

@@ -22,7 +22,7 @@ function expect(name, got, want) {
 var logs, chats, damage, bIsWaitingOnRoll;
 var currentPlayerDisplayName, listPlayerIDsWaitingOnRollFrom, listRollCallbackFunctions;
 var listTokensWaitingOnSavingThrowsFrom, currentlyCastingSpellRoll;
-var state = { sCharacterSheetType: 'OGL' };
+var state = {};
 var graphicWrites;
 var graphic = {
     get: function(k) { return k === 'name' ? 'Goblin' : 'character'; },
@@ -59,7 +59,6 @@ function reset(callback) {
     bIsWaitingOnRoll = true; currentPlayerDisplayName = 'Caster';
     listPlayerIDsWaitingOnRollFrom = ['defender']; listRollCallbackFunctions = [callback];
     listTokensWaitingOnSavingThrowsFrom = [target]; currentlyCastingSpellRoll = valid();
-    state.sCharacterSheetType = 'OGL';
 }
 function invoke(name, fn, data) {
     var error, result;
@@ -138,12 +137,9 @@ expect('zero total is valid', safeRollTotal(roll(0)), 0);
     reset(); var data = valid(); data.bRequiresSavingThrow = true; data.dc = dc;
     missing('direct save spell missing DC ' + i, DirectSpellRollCallback, data, 'save DC was not present');
 });
-reset(); state.sCharacterSheetType = 'Shaped'; currentlyCastingSpellRoll.dc = undefined;
-casterFault('Shaped missing DC', SavingThrowAgainstDamageRollCallback, valid(), 'save DC was not present');
-['OGL', 'Shaped'].forEach(function(sheet) {
+['OGL'].forEach(function(sheet) {
     [5, 18].forEach(function(total) {
-        reset(); state.sCharacterSheetType = sheet;
-        if (sheet === 'Shaped') { currentlyCastingSpellRoll.dc = 14; }
+        reset();
         var data = valid(); data.d20Rolls = [roll(total)];
         invoke(sheet + ' valid save', SavingThrowAgainstDamageRollCallback, data);
         expect(sheet + ' save damage ' + total, damage[0][0], total === 5 ? 8 : 4);
@@ -153,9 +149,6 @@ reset(); currentlyCastingSpellRoll = undefined;
 casterFault('missing spell context', SavingThrowAgainstDamageRollCallback, valid(), 'spell data was not present');
 reset(); listTokensWaitingOnSavingThrowsFrom = [];
 casterFault('missing save target', SavingThrowAgainstDamageRollCallback, valid(), 'No target was waiting');
-reset(); state.sCharacterSheetType = 'Shaped'; var shapedSpell = valid();
-shapedSpell.bRequiresSavingThrow = true; shapedSpell.dc = undefined;
-missing('direct Shaped missing DC', DirectSpellRollCallback, shapedSpell, 'save DC was not present');
 reset(WeaponAttackRollCallback);
 listPlayerIDsWaitingOnRollFrom.push('other'); listRollCallbackFunctions.push(WeaponAttackRollCallback);
 var badAttack = valid(); badAttack.dmgRolls = [];
