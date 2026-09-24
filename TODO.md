@@ -788,75 +788,70 @@ each was found and have since shifted.
       inline rolls from a prompted player aren't swallowed
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
-- [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
-      **V1 CORE BLOCKER (2026-09-24, final).** Briefly moved to stretch and put
-      back the same day: a rogue's Sneak Attack is most of a rogue's damage, so
+- [ ] **Rider damage arrives as `globaldamage`, not `dmg2`.**
+      **V1 CORE BLOCKER. Question settled 2026-09-24 by a live capture.**
 
-      **Reference implementation, preserved before deletion (2026-09-24).** The
-      Shaped branch is currently the ONLY path in the script that reads a second
-      damage roll, and Shaped is about to be removed. Its shape is recorded here
-      so the OGL implementation has something to copy:
+      A Sneak Attack from the 2014 sheet was captured in full. The rider does
+      NOT use `dmg2`, and `dmg2` is present but empty, so the cheap fix that
+      looked obvious - uncommenting the two `dmg2` lines - would have pushed a
+      zero-damage entry with a blank type and changed nothing visible. It would
+      have looked like a fix and shipped as one.
 
-      ```js
-      dmg2Index  = extractInlineRollIndex(content, 'attack_second_damage');
-      crit2Index = extractInlineRollIndex(content, 'attack_second_damage_crit');
-      dmgType2   = extractTemplateText(content, 'attack_second_damage_type');
-      // then, in the shared tail:
-      if(dmg2Index !== undefined && inlineData[dmg2Index]){
-          this.dmgRolls.push(inlineData[dmg2Index]);
-          this.dmgTypes.push(universalizeString(dmgType2 || ""));
-      }
+      Captured template (Dagger +3, rogue, vs Minotaur Skeleton):
+
+      ```
+      r1              = $[[0]]  1d20cs>20 +5[DEX] +3[MOD] +5[PROF]   -> 18
+      r2              = $[[1]]  0d20cs>20 + same mods                -> 13
+      dmg1            = $[[2]]  1d4 +5[DEX] +3[MOD]                  -> 12
+      dmg1type        = Piercing
+      dmg2            = $[[3]]  0                                    ->  0   EMPTY
+      dmg2type        = (blank)
+      crit1           = $[[4]]  1d4[CRIT]                            ->  2
+      crit2           = $[[5]]  0[CRIT]                              ->  0
+      globaldamage    = $[[6]]  2d6[Sneak Attack]                    ->  7   THE RIDER
+      globaldamagecrit= $[[7]]  2d6[Sneak Attack]                    ->  8
+      globaldamagetype= Sneak
       ```
 
-      The OGL equivalents are `dmg2`, `crit2` and `dmg2type`, commented out at
-      lines 104, 106 and 108. The shared tail at the bottom of `rollData` is NOT
-      sheet-specific and already handles a second entry, so it survives the
-      Shaped removal untouched. Both consumers (`WeaponAttackRollCallback`,
-      `DirectSpellRollCallback`) already read `dmgRolls[1]`.
-      dropping it silently reports the wrong number on most of that player's turns.
-      Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
-      Divine Smite used as a rider, elemental rider damage, a versatile second
-      damage type - show in the chat template but are never subtracted from the
-      target's HP.
+      The script logged `Applying 12 piercing damage to Minotaur` - the 7 was
+      dropped, exactly as reported.
 
-      **Confirmed cause.** In the OGL branch of `rollData`, the second damage
-      extraction is commented out:
+      ### What the fix requires
 
-      ```js
-      //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');    // line 104
-      //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');    // line 108
-      ```
+      1. Parse `globaldamage` and `globaldamagetype` in `rollData`.
+      2. **`dmgRolls` stops being a two-element assumption.** With `dmg1`,
+         `dmg2` and `globaldamage` there can be three entries.
+         `WeaponAttackRollCallback` and `DirectSpellRollCallback` both read
+         `dmgRolls[0]` and `dmgRolls[1]` explicitly and must become a loop.
+      3. Skip zero-total entries rather than applying them. `dmg2` is `0` on
+         every attack that has no second damage, which is most of them.
 
-      The Shaped branch reads its equivalent fields (`attack_second_damage`,
-      `attack_second_damage_type`, lines 128 and 132), so this gap exists only
-      on the sheet V1 actually targets.
+      ### The trap in `globaldamagetype`
 
-      **The consumer is already correct and waiting.** `WeaponAttackRollCallback`
-      (747-756) reads `dmgRolls[1]`, guards it with `safeRollTotal`, and calls
-      `applyDamage` a second time with `dmgTypes[1]`. `DirectSpellRollCallback`
-      (~830) does the same. Because the parser can never push a second entry on
-      OGL, `dmgRolls.length` is always 1 and that entire branch is dead code.
-      Uncommenting two lines is most of the fix.
+      It is **free text, not a damage type.** Here it is `Sneak`, which is a
+      label. Sneak Attack damage is the same type as the weapon - piercing in
+      this capture - so typing the rider as `sneak` would make it match no
+      resistance at all, and a creature resistant to piercing would take full
+      rider damage. That is a wrong number in the opposite direction from the
+      bug being fixed.
 
-      **Open question - do not assume `dmg2` is the whole answer.** Matt reports
-      the bonus damage rendering *above* the standard damage. In the OGL attack
-      template `dmg2` renders *below* `dmg1`, so the rider he saw may be arriving
-      in a different field - the sheet's global damage modifier
-      (`globaldamage` / `globaldamagetype`) is the likely candidate, and Sneak
-      Attack and Divine Smite are both commonly configured that way rather than
-      as a weapon's second damage.
+      But it is not always a label: a flaming weapon rider would set it to
+      `Fire`, and Divine Smite to `Radiant`, and in those cases it IS the
+      correct type and differs from the weapon's.
 
-      **The evidence that settles it:** the raw `msg.content` of one such attack.
-      Capture the template text from the API console during a smoke test and
-      check which field names carry the rider. If it is `dmg2`, uncomment two
-      lines and add tests. If it is `globaldamage`, the parser needs a third
-      damage slot and `dmgRolls` stops being a two-element assumption - which
-      also means the fixed-arity `dmgRolls[0]`/`dmgRolls[1]` shape in both
-      callbacks should become a loop. Decide after seeing the string.
+      Proposed rule, to be confirmed before implementing: if
+      `globaldamagetype` matches one of the thirteen 5e damage types (acid,
+      bludgeoning, cold, fire, force, lightning, necrotic, piercing, poison,
+      psychic, radiant, slashing, thunder) use it; otherwise fall back to
+      `dmg1type`. That handles Sneak Attack, Divine Smite and elemental riders
+      correctly with one small closed list.
 
-      Distinct from the damage-only rider item below, which is about a rider
-      arriving as its own message with no to-hit roll. This one is a rider
-      inside a normal weapon attack message.
+      ### Incidental confirmations from the same capture
+
+      - `crit1` is populated (`1d4[CRIT]` -> 2) and discarded, confirming the
+        audit's crit finding.
+      - `r2` is populated (13) and discarded, confirming the advantage finding.
+      - Both remain nice-to-haves, not V1 core.
 - [ ] **Damage-only riders (Divine Smite and similar).** Found live 2026-09-23.
       Divine Smite is not a spell attack: it has no to-hit roll and no saving
       throw, it is extra radiant damage on a melee hit already made. Its roll
