@@ -8,6 +8,87 @@ Status key: `[ ]` open · `[x]` done · `[~]` in progress
 
 ---
 
+## Scope decision, 2026-09-24 — AOE and Movement cut from V1
+
+Matt's call, and it is settled: **AOE spells and Movement come out of the
+script entirely.** They are not deferred-in-place behind a flag; the code is
+deleted. They return as new features once baseline functionality is proven.
+
+The reason is not only that they are broken. It is that a turn menu offering
+four buttons, of which two do nothing and one is inert, makes the script
+impossible to reason about at the table - including for the person who wrote
+the fixes. A smaller surface that is entirely true is worth more than a large
+one that has to be remembered.
+
+After removal the turn menu is exactly two actions: **Weapon Attack** and
+**Direct Spell**. Both work today, modulo the open items in Phase 1.
+
+### What gets deleted
+
+- `AOESpellAttack`, `AOESpellRollCallback`, `spellEffects`
+- `coneDirectionPromptCallback`, `lineDirectionPromptCallback`
+- `findAllTokensInCone` / `InSphere` / `InLine` / `InCube` / `InCylinder`,
+  and `distanceBetween`
+- `location`, `createLocFromToken`
+- `Move`, `BuildMovementWalls`, `iXStart`, `iYStart`, `iMoveSpeed*`, and the
+  `bar1_value` write in `ResetTokenTurnValues`
+- the eight direction arms, `responseCallbackFunction` and
+  `bIsWaitingOnResponse` - the whole direction-prompt mechanism exists only to
+  aim cones and lines
+- `dmgTypeToFXName` and `spawnFxBetweenPoints` (all call sites are AOE; the
+  weapon-attack FX at the `glow-blood` site is hard-coded and stays)
+- the `'AOE Spell'` and `'Move'` entries in `generateTurnOptions` and their
+  parallel commands
+
+Roughly 450 of 1509 lines, about 30% of the file.
+
+### What explicitly stays
+
+- `distanceToPixels` - the reticle uses it, not just geometry
+- the **saving-throw queue** (`SavingThrowAgainstDamageRollCallback`,
+  `listTokensWaitingOnSavingThrowsFrom`) - `DirectSpellRollCallback` enqueues
+  saves for single-target save spells, so this is not AOE-only
+- `spawnFx` - the weapon-attack blood effect
+- the reticle prompt at the "Move the target to where you would like to
+  attack" site, which is targeting, not the Move action
+
+### Knowledge to carry forward — do not lose this with the code
+
+When AOE is rebuilt, these audit findings are the starting point. They are
+recorded here because the evidence disappears with the deleted code:
+
+- **Cone and line AOEs never adjudicate a save.** `spellEffects` queues saving
+  throw expectations without setting `bIsWaitingOnRoll`, which is recomputed
+  only inside the interception branch, so every defender's save hits the
+  early-return guard. Sphere escapes only because it resolves inside the
+  callback. Any rebuild must set the waiting flag at the queue site.
+- **Cone `downleft` has zero area** - `bLine2XNeg` should be false. Measured 14
+  lattice points against 830 for `upright`.
+- **Line `upleft` and `downleft` use each other's axis** - measured, they
+  return each other's tokens.
+- **Sphere AOEs include the caster**, who is then asked to save against their
+  own spell.
+- **Cube is an empty body; cylinder is a verbatim copy of sphere** that ignores
+  its `height` parameter.
+- **Range parsing only accepts self-origin shapes.** `self cone 15ft` and any
+  leading whitespace yield `NaN` silently. Ranged-origin AOEs (Fireball) were
+  never supported at all.
+- **The eight-way geometry switches carry 72 hand-chosen signs and literals**
+  with no structural cross-check. Both geometry bugs live there. A rebuild
+  should derive the half-plane tests from the direction vector rather than
+  hand-writing each arm - that is the actual fix, not correcting two signs.
+- Movement was never implemented in any form: `Move` calls an empty
+  `BuildMovementWalls` and returns. There is nothing to preserve.
+
+### Exit criterion
+
+`npm test` green, the turn menu shows exactly two buttons, `!combat aoespell`
+/ `!combat move` / the direction commands all answer with the unknown-command
+whisper rather than failing silently, and the whole file parses - see the
+new whole-file compile test, which the suite did not previously have.
+
+---
+
 ## Code audit, 2026-09-23 — six-subsystem parallel sweep
 
 Six agents read the file in full, one subsystem each, against one rubric:
@@ -607,9 +688,15 @@ each was found and have since shifted.
 - [ ] D&D 2024 / Beacon support: `getSheetItem`/`setSheetItem` (async),
       HTML roll parsing (`data-result` attributes), Experimental API server
       requirement documented
-- [ ] Planned features from original README: range enforcement, movement limits
-      from bar1, ranged-origin AOEs (Fireball), Cube/Cylinder shapes,
-      class-specific actions
+- [ ] **AOE spells, rebuilt** — removed from V1 on 2026-09-24; see the scope
+      decision at the top of this file for the findings to start from. Scope
+      the rebuild to derive geometry from a direction vector rather than eight
+      hand-written switch arms, and to support ranged-origin shapes (Fireball)
+      and Cube/Cylinder, which never worked
+- [ ] **Movement, built for the first time** — removed from V1 on 2026-09-24.
+      It was never implemented upstream, so this is new work, not a repair:
+      movement limits from bar1, range enforcement, movement walls
+- [ ] Planned features from original README: class-specific actions
 
 ---
 

@@ -16,6 +16,11 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
 - Target character sheet: D&D 5E by Roll20 (2014).
 - Shaped sheet support is being removed. Beacon / 2024 sheet support is deferred to V2.
 - DeathMarkersPlus no longer exists. V1 uses Roll20's native status markers; custom markers are a V2 extension.
+- AOE spells and Movement are cut from V1 entirely - the code is deleted, not
+  flagged off. The V1 turn menu is exactly two actions: Weapon Attack and Direct
+  Spell. Both return as new features after baseline functionality is proven; the
+  findings needed to rebuild them are recorded in `TODO.md` under the 2026-09-24
+  scope decision. Do not reintroduce a button for an action that does not work.
 
 ## Conventions
 
