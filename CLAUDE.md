@@ -24,14 +24,23 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
   Spell. Both return as new features after baseline functionality is proven; the
   findings needed to rebuild them are recorded in `TODO.md` under the 2026-09-24
   scope decision. Do not reintroduce a button for an action that does not work.
-- **V1 is done when two actions resolve correctly end to end** (settled
-  2026-09-24). Weapon Attack and Direct Spell: right target, right to-hit,
-  right damage - including rider damage and resistances. Nothing beyond that.
-  Crits, advantage/disadvantage and status markers are all V2, even though the
-  parser already extracts crit and advantage fields today. Extracting them is
-  not the same as shipping them; V1 discards them deliberately.
-  Consequence worth stating: **rider damage is in V1 scope**, so the dropped
-  second damage component is a V1 blocker rather than a backlog item.
+- **V1 core is two actions resolving correctly end to end** (settled
+  2026-09-24, narrowed same day). Weapon Attack and Direct Spell: right target,
+  right to-hit, right damage from the primary damage roll, with resistances,
+  immunities and vulnerabilities applied. That is the whole of V1 core.
+  Nothing ships as V1 until those two work.
+- **Stretch, in this order, only if core lands early:** rider damage (Sneak
+  Attack, Divine Smite), advantage/disadvantage, crits. Each is a genuine
+  addition rather than a repair, and each is already half-built - the parser
+  extracts `crit1` and `r2` today and every consumer discards them. Extracting
+  a field is not shipping the feature. Pull these in one at a time from the
+  top, and only when core is proven at the table; do not start one because it
+  looks small.
+- Status markers stay in V2 regardless of how core goes.
+- **Why V1 was narrowed:** the original V1 was scoped when the team believed
+  far more of the upstream script worked than actually does. The 2026-09-23
+  audit established that one of five advertised actions worked end to end. A
+  scope set against an imagined baseline is not a commitment worth keeping.
 
 ## Conventions
 

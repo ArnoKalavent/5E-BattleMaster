@@ -89,37 +89,54 @@ new whole-file compile test, which the suite did not previously have.
 
 ---
 
-## V1 done-definition, 2026-09-24
+## V1 done-definition, 2026-09-24 (narrowed same day)
 
-Matt's call, settled. **V1 is done when Weapon Attack and Direct Spell resolve
-correctly end to end**: right target, right to-hit, right damage including
-rider damage and resistances. Nothing beyond that.
+**V1 core: Weapon Attack and Direct Spell resolve correctly end to end.**
+Right target, right to-hit, right damage from the primary damage roll, with
+resistances, immunities and vulnerabilities applied. That is all of it.
+Nothing ships as V1 until those two work at the table.
 
-Explicitly NOT in V1, and each is already partly built, which is why they need
-saying out loud:
+### Why this was narrowed within a day of being set
 
-- **Crits.** `crit1Index` is extracted by the parser today and never read;
-  `critRolls`/`critTypes` are initialised and never populated. Leave it that way.
-- **Advantage/disadvantage.** `r2` is parsed into `d20Rolls[1]`; every consumer
-  reads `[0]`. Leave it that way.
-- **Status markers.** Nothing marks dead, unconscious or bloodied, and nothing
-  should in V1. `CLAUDE.md` previously said V1 would use native markers; that
-  line is superseded.
+The first version of this definition required rider damage as well, and the
+original Phase-era V1 was broader still. Both were written when we believed far
+more of the upstream script worked than it does. The 2026-09-23 audit settled
+that: of five advertised actions, one worked end to end. A scope set against an
+imagined baseline is not worth defending, so it was cut twice in one day - once
+to drop AOE and Movement, once to move riders out of core.
 
-Extracting a field is not the same as shipping the feature. V1 discards these
-deliberately rather than half-supporting them.
+### Stretch, in this order, only if core lands early
 
-### What this makes a blocker
+1. **Rider damage** (Sneak Attack, Divine Smite). Parsed and dropped today;
+   `dmg2`/`dmg2type` are commented out in the OGL branch while both callbacks
+   are already written to consume a second damage roll.
+2. **Advantage/disadvantage.** `r2` is parsed into `d20Rolls[1]`; every consumer
+   reads `[0]`.
+3. **Crits.** `crit1Index` is extracted and never read; `critRolls`/`critTypes`
+   are initialised and never populated.
 
-- Rider damage (Sneak Attack, Divine Smite): currently parsed and dropped,
-  because `dmg2`/`dmg2type` are commented out in the OGL branch. In scope.
-- Resistances, immunities and vulnerabilities: landed in 2276a51, unverified
-  live. Gate 4 confirms them.
-- `tokenfromlist` assigning a raw Graphic: makes every attack after a
-  disambiguation prompt a guaranteed miss. Wrong target, so in scope.
-- AC coerced from an unvalidated string: wrong to-hit. In scope.
-- Resistance rounding `.5` up rather than down: wrong damage. In scope.
-- Empty damage type matching every immunity: wrong damage. In scope.
+Each is half-built, which makes each look smaller than it is. Pull them in one
+at a time from the top, and only once core is proven live.
+
+**Status markers remain V2** regardless of how core goes.
+
+### The V1 core blocker list
+
+Every one of these is a wrong target, a wrong to-hit or a wrong damage number,
+which is exactly what the definition covers:
+
+- `tokenfromlist` assigns a raw Graphic, so every attack after a disambiguation
+  prompt is a guaranteed miss. Wrong target.
+- AC is coerced from an unvalidated string: `""` -> always hit, `undefined` ->
+  never hit, `"15 (natural armor)"` -> NaN -> never hit. Wrong to-hit.
+- Resistance rounds `.5` up; 5e rounds down. Wrong damage on every odd total.
+- An empty `dmgType` matches every immunity, because `"".indexOf("")` is 0, so
+  the hit vanishes entirely. Wrong damage.
+- Blank or non-numeric bars corrupt silently: `"" >= 0` is true so a token with
+  no temp-HP bar takes the temp-HP path, and non-numeric bar text writes `NaN`
+  persistently. Wrong damage.
+- Resistances/immunities/vulnerabilities landed in 2276a51 but have never been
+  confirmed live. Gate 4.
 
 ---
 
@@ -757,9 +774,9 @@ each was found and have since shifted.
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
 - [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
-      **V1 BLOCKER (2026-09-24).** The V1 done-definition requires correct damage
-      "including rider damage", so this is no longer a backlog item. It is one of
-      the things that must work before V1 ships.
+      **V1 STRETCH (2026-09-24, revised).** Briefly classified a V1 blocker; moved
+      to stretch the same day when V1 core was narrowed to the primary damage
+      roll only. Take it first if core lands early - it is the top stretch item.
       Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
       Divine Smite used as a rider, elemental rider damage, a versatile second
       damage type - show in the chat template but are never subtracted from the
