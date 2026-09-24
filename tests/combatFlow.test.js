@@ -62,7 +62,7 @@ var chats = [];
 function sendChat(who, what) { chats.push(what); }
 
 // Module state the extracted functions read/write
-var bInCombat, bStagingInitiative, bIsWaitingOnRoll, bIsWaitingOnResponse;
+var bInCombat, bStagingInitiative, bIsWaitingOnRoll;
 var sLastPromptedTurnID, iLastTurnorderLength = 0;
 var listPlayerIDsWaitingOnRollFrom = [];
 var listRollCallbackFunctions = [];

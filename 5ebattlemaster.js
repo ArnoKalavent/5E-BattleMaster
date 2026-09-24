@@ -4,15 +4,12 @@ var BattleMaster = BattleMaster || (function() {
     /* BUILD REVISION — filled in by tools/build.js for distribution */
     var buildRev = 'dev (unstamped)';
     
-    var bInCombat, bStagingInitiative, bIsWaitingOnRoll, bIsWaitingOnResponse, responseCallbackFunction, selectedTokenCallbackFunction,
+    var bInCombat, bStagingInitiative, bIsWaitingOnRoll, selectedTokenCallbackFunction,
     sLastPromptedTurnID, iLastTurnorderLength = 0,
-    iXStart, iYStart, iXCurrent, iYCurrent,
     currentPlayerDisplayName, currentTurnPlayer, currentTurnCharacter, currentTurnToken,
     currentlyCastingSpellRoll,
     target,
     reticleTokenId,
-    direction,
-    range,
     listTokensInEncounter = [],
     listTokensWaitingOnSavingThrowsFrom = [],
     sPreviousAction, sPreviousBonusAction,
@@ -151,14 +148,6 @@ var BattleMaster = BattleMaster || (function() {
             this.dmgTypes.push(universalizeString(dmgType2 || ""));
         }
     }
-    function location(x,y,z){
-        this.x = x;
-        this.y = y;
-        this.z = z;
-    }
-    var createLocFromToken = function(token){
-        return new location(token.get('left'), token.get('top'), 0)
-    }
     function tokenWrapper(token){
         this.token = token;
         this.associatedCharacter = getObj('character', token.get('represents'));
@@ -167,8 +156,6 @@ var BattleMaster = BattleMaster || (function() {
         this.bHasTakenAction = false;
         this.bHasTakenBonusAction = false;
         this.bHasTakenReaction = false;
-        this.iMoveSpeedTotal = token.get('bar1_max');
-        this.iMoveSpeedRemaining = token.get('bar1_value');
         this.name = token.get('name');
         this.ac = undefined;
         if(token.get('represents')){
@@ -468,7 +455,7 @@ var BattleMaster = BattleMaster || (function() {
             token,
             text='',
             totamount;
-        if (msg.type !== 'api' && !bIsWaitingOnRoll && !bIsWaitingOnResponse){
+        if (msg.type !== 'api' && !bIsWaitingOnRoll){
             return;
         }
         if(bIsWaitingOnRoll && msg.inlinerolls != undefined){
@@ -488,8 +475,7 @@ var BattleMaster = BattleMaster || (function() {
         args = msg.content.split(/\s+/);//splits the message contents into discrete arguments
 		switch(args[0]) {
 		    case '!combat':
-                if(['weaponattack', 'directspell', 'aoespell', 'selectedTarget', 'tokenfromlist',
-                    'up', 'down', 'left', 'right', 'upright', 'downleft', 'upleft', 'downright'].indexOf(args[1]) !== -1 &&
+                if(['weaponattack', 'directspell', 'selectedTarget', 'tokenfromlist'].indexOf(args[1]) !== -1 &&
                     (!bInCombat || !currentTurnPlayer || !currentTurnToken || !currentTurnToken.token)){
                     reportRefusedCommand(msg, "Combat is not running with a current turn.");
                     return;
@@ -518,24 +504,6 @@ var BattleMaster = BattleMaster || (function() {
                                 if(promptTarget()){
                                     selectedTokenCallbackFunction = DirectSpellAttack;
                                 }
-                    break;
-		            case 'move': 
-                    break;
-		            case 'aoespell': AOESpellAttack(); 
-                    break;
-                    case 'up':
-                    case 'down':
-                    case 'left':
-                    case 'right':
-                    case 'upright':
-                    case 'downleft':
-                    case 'upleft':
-                    case 'downright':
-                        invokePendingCallback(msg, bIsWaitingOnResponse ? responseCallbackFunction : undefined, function(){
-                            direction = args[1];
-                            bIsWaitingOnResponse = false;
-                            responseCallbackFunction = undefined;
-                        });
                     break;
                     case 'selectedTarget':
                         invokePendingCallback(msg, selectedTokenCallbackFunction, findTokenAtTarget);
@@ -573,7 +541,9 @@ var BattleMaster = BattleMaster || (function() {
                             promptButtonArray("Character Sheet Type",["OGL", "Shaped"],["SheetConfig OGL", "SheetConfig Shaped"], s);
                         }
                     break;
-		            //default: break;
+		            default:
+                        reportRefusedCommand(msg, "Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle, !combat config.");
+                    break;
 		        }break;
 		}
     },
@@ -588,8 +558,7 @@ var BattleMaster = BattleMaster || (function() {
         }
         var cancelledRolls = 0, cancelledSaves = 0;
         var canClearPrompt = cancelAll || (currentTurnPlayer && currentTurnPlayer.id === msg.playerid);
-        var hadPrompt = !!canClearPrompt && !!(bIsWaitingOnResponse || responseCallbackFunction ||
-            selectedTokenCallbackFunction || reticleTokenId);
+        var hadPrompt = !!canClearPrompt && !!(selectedTokenCallbackFunction || reticleTokenId);
         for(var i = listPlayerIDsWaitingOnRollFrom.length - 1; i >= 0; i--){
             if(cancelAll || listPlayerIDsWaitingOnRollFrom[i] === msg.playerid){
                 listPlayerIDsWaitingOnRollFrom.splice(i, 1);
@@ -606,8 +575,6 @@ var BattleMaster = BattleMaster || (function() {
             }
         }
         if(canClearPrompt){
-            bIsWaitingOnResponse = false;
-            responseCallbackFunction = undefined;
             selectedTokenCallbackFunction = undefined;
             var reticle = reticleTokenId ? getObj('graphic', reticleTokenId) : undefined;
             if(reticle){ reticle.remove(); }
@@ -635,7 +602,6 @@ var BattleMaster = BattleMaster || (function() {
     StageInitiative = function(){
         bInCombat = false;
         bStagingInitiative = true;
-        bIsWaitingOnResponse = false;
         bIsWaitingOnRoll = false;
         sLastPromptedTurnID = undefined;
         log('Combat staged - waiting on initiative.');
@@ -658,7 +624,6 @@ var BattleMaster = BattleMaster || (function() {
         }
         bStagingInitiative = false;
         bInCombat = true;
-        bIsWaitingOnResponse = false;
         iLastTurnorderLength = parsed.length;
         log('Combat begun!');
         sendChat("BattleMaster", "Combat begins" + (announceLabel ? " - " + announceLabel : "") + "!");
@@ -670,7 +635,6 @@ var BattleMaster = BattleMaster || (function() {
     EndCombat = function(){
         bInCombat = false;
         bStagingInitiative = false;
-        bIsWaitingOnResponse = false;
         bIsWaitingOnRoll = false;
         sLastPromptedTurnID = undefined;
         iLastTurnorderLength = 0;
@@ -721,7 +685,6 @@ var BattleMaster = BattleMaster || (function() {
 		if (typeof(turnorder) === 'string')
 			{turnorder = JSON.parse(turnorder);}
         //Reset all the variables for the new turn
-        ResetTokenTurnValues(currentTurnToken);
         ResetCharacterTurnValues(currentTurnCharacter);
         ResetUnspecificTurnValues();
         _.each(turnorder, function(current){
@@ -738,16 +701,6 @@ var BattleMaster = BattleMaster || (function() {
         promptButtonArray("Select an action", generateTurnOptions(),generateTurnOptionCommands(), currentPlayerDisplayName);
     },
     
-    ResetTokenTurnValues = function(currentTurnTokenWrapper){
-        currentTurnTokenWrapper.iMoveSpeedTotal = currentTurnTokenWrapper.token.get('bar1_max');
-        currentTurnTokenWrapper.iMoveSpeedRemaining = currentTurnTokenWrapper.iMoveSpeedTotal;
-        //'bar1_value' - the old 'bar1_val' was a typo, so remaining movement
-        //was never actually reset between turns.
-        currentTurnTokenWrapper.token.set('bar1_value', currentTurnTokenWrapper.iMoveSpeedRemaining);
-        iXStart = currentTurnTokenWrapper.token.get('left');
-        iYStart = currentTurnTokenWrapper.token.get('top');
-    },
-    
     ResetCharacterTurnValues = function(currentTurnCharacter){
         
     },
@@ -759,19 +712,10 @@ var BattleMaster = BattleMaster || (function() {
         listTokensInEncounter = [];
     },
     
-    BuildMovementWalls = function(){
-        
-    },
-
     universalizeString = function(string){
         if(typeof string !== "string"){ return ""; }
         var tempString = string.toLowerCase().trim();
         return tempString.replace(/\s/g, "");
-    },
-    
-    Move = function(){
-        BuildMovementWalls();
-        
     },
     
     WeaponAttack = function(){
@@ -837,15 +781,6 @@ var BattleMaster = BattleMaster || (function() {
         }
     },
 
-    IsWithinRange = function(rangeString, originX, originY, targetX, targetY){
-        if(rangeString = ""){
-            return true;
-        }
-        var rangeInt = distanceToPixels(parseInt(rangeString.substring(0,rangeString.indexOf(' '))));
-        var distance = distanceBetween(originX, originY, targetX, targetY);
-        return (rangeInt >= distance);
-    },
-    
     DirectSpellRollCallback = function(rollData){
         if(rollData.bRequiresSavingThrow){
             var spellDamage = safeRollTotal(rollData.dmgRolls[0]);
@@ -901,126 +836,6 @@ var BattleMaster = BattleMaster || (function() {
         return true;
     },
     
-    AOESpellAttack = function(){
-        sendChat('BattleMaster', '/w "' + currentPlayerDisplayName + '" Roll your AOE spell from your character sheet!');
-        listPlayerIDsWaitingOnRollFrom.push(currentTurnPlayer.id);
-        listRollCallbackFunctions.push(AOESpellRollCallback);
-        bIsWaitingOnRoll = true;
-    },
-    
-    AOESpellRollCallback = function(rollData){
-        currentlyCastingSpellRoll = rollData;
-        var rangeString = rollData.rangeString,
-        x = currentTurnToken.token.get('left'), y = currentTurnToken.token.get('top'),
-        args = rangeString.toLowerCase().split(/\s+/);
-        log("AOE spell range: " + rangeString);
-        if(args[0]!= "self"){
-            log("Not self targeted!");
-            reportMissingRoll(rangeString === ""
-                ? "The spell range was missing or empty in the roll; only self-origin AOE spells (cone, line, sphere) are supported."
-                : 'The spell range was read as "' + rangeString + '"; only self-origin AOE spells (cone, line, sphere) are supported.');
-        }
-        else{
-            switch(args[1]){
-                case "cone": 
-                    promptButtonArray("Select a direction", ["North","South","East","West","Northeast","Northwest","Southeast","Southwest"], 
-                    ["up","down","right","left","upright","upleft","downright","downleft"], currentPlayerDisplayName);
-                    bIsWaitingOnResponse = true;
-                    responseCallbackFunction = coneDirectionPromptCallback;
-                    range = args[2];
-                    log("Spell is a cone!");
-                break;
-                case "line": 
-                    promptButtonArray("Select a direction", ["North","South","East","West","Northeast","Northwest","Southeast","Southwest"], 
-                    ["up","down","right","left","upright","upleft","downright","downleft"], currentPlayerDisplayName);
-                    bIsWaitingOnResponse = true;
-                    responseCallbackFunction = lineDirectionPromptCallback;
-                    range = args[2];
-                 break;
-                case "sphere": 
-                    var effectType = "burst-"+dmgTypeToFXName(rollData.dmgTypes[0]);
-                    log("Spawning fx: " + effectType);
-                    spawnFx(x,y,effectType);
-                    _.each(findAllTokensInSphere(createLocFromToken(currentTurnToken.token),args[2]), spellEffects)
-                break;
-                case "cube":
-                case "cylinder":
-                    reportMissingRoll('The AOE shape "' + (args[1] || 'unknown') + '" is not implemented yet; supported self-origin shapes are cone, line, and sphere.');
-                break;
-                default:
-                    reportMissingRoll('The spell range "' + rangeString + '" could not be interpreted; expected "self <shape> <size>"; supported self-origin shapes are cone, line, and sphere.');
-                break;
-            }
-        }
-        return true;
-    },
-
-    distanceBetween = function(origin, finalPos){
-        var deltaX = origin.x - finalPos.x,
-        deltaY = origin.y - finalPos.y,
-        deltaZ = origin.z - finalPos.z;
-        return Math.sqrt(Math.pow(deltaX,2) + Math.pow(deltaY,2) + Math.pow(deltaZ,2));
-    },
-
-    coneDirectionPromptCallback = function(){
-        log("Casting " + direction);
-        var xMod = 0, yMod = 0,
-        x = currentTurnToken.token.get("left"), y = currentTurnToken.token.get("top");
-        if(direction.toLowerCase().indexOf('up') != -1){
-            yMod = -35;
-        }
-        else if(direction.toLowerCase().indexOf('down') != -1){
-            yMod = 35;
-        }
-        if(direction.toLowerCase().indexOf('left') != -1){
-            xMod = -35;
-        }
-        else if (direction.toLowerCase().indexOf('right') != -1){
-            xMod = 35;
-        }
-        var effectType = "breath-"+dmgTypeToFXName(currentlyCastingSpellRoll.dmgTypes[0]);
-        log("Spawning fx: " + effectType);
-        spawnFxBetweenPoints({x:(x+xMod), y:(y+yMod)},{x:(x+xMod+xMod), y:(y+yMod+yMod)},effectType);
-        _.each(findAllTokensInCone(new location(x + xMod, y + yMod,0), direction, range), spellEffects);
-    },
-
-    lineDirectionPromptCallback = function(){
-        var xMod = 0, yMod = 0,
-        x = currentTurnToken.token.get("left"), y = currentTurnToken.token.get("top");
-        if(direction.toLowerCase().indexOf('up') != -1){
-            yMod = -35;
-        }
-        else if(direction.toLowerCase().indexOf('down') != -1){
-            yMod = 35;
-        }
-        if(direction.toLowerCase().indexOf('left') != -1){
-            xMod = -35;
-        }
-        else if (direction.toLowerCase().indexOf('right') != -1){
-            xMod = 35;
-        }       
-        var effectType = "beam-"+dmgTypeToFXName(currentlyCastingSpellRoll.dmgTypes[0]);
-        log("Spawning fx: " + effectType);
-        var startLoc = new location(x+xMod,y+yMod,0), endLoc = new location(x+xMod+xMod, y+yMod+yMod,0);
-        spawnFxBetweenPoints(startLoc,endLoc,effectType);
-        //findAllTokensInLine takes (origin location, direction, range) - the
-        //same contract as findAllTokensInCone above.
-        _.each(findAllTokensInLine(new location(x + xMod, y + yMod, 0), direction, range), spellEffects);
-    },
-
-    spellEffects = function(token){
-        var playerID = findWhoIsControlling(token.associatedCharacter);
-        var player = getObj('player', playerID);
-        var recipient = player ? '"' + player.get('displayname') + '"' : 'GM';
-        if(!player){
-            log("BattleMaster: No controlling player was resolvable for the saving throw; whispering GM.");
-        }
-        sendChat("BattleMaster", '/w ' + recipient + ' Please roll a ' + currentlyCastingSpellRoll.saveType + ' saving throw for ' + token.name);
-        listPlayerIDsWaitingOnRollFrom.push(playerID);
-        listRollCallbackFunctions.push(SavingThrowAgainstDamageRollCallback);
-        listTokensWaitingOnSavingThrowsFrom.push(token);
-    },
-
     distanceToPixels = function(dist) {
 	    var PIX_PER_UNIT = 70;
 	    var page = getObj('page', Campaign().get('playerpageid'));
@@ -1032,257 +847,6 @@ var BattleMaster = BattleMaster || (function() {
         }
         return PIX_PER_UNIT * (dist/scale);
     },  
-    
-    findAllTokensInCone = function(origin, direction, range){
-        var listTokensToReturn = [],
-        line1YofX, line2YofX,
-        line1XofY, line2XofY,
-        bLine1XNeg, bLine2XNeg,
-        bLine1YNeg, bLine2YNeg;
-        var tokenIsConstrainedByLines = function(token, line1XofY, line1YofX, line2XofY, line2YofX, bLine1XNeg, bLine1YNeg, bLine2XNeg, bLine2YNeg, range){
-            var bValueToReturn, tokenLoc = createLocFromToken(token);
-            bValueToReturn = (bLine1XNeg && tokenLoc.x <= line1XofY(tokenLoc.y) || (!bLine1XNeg) && tokenLoc.x >= line1XofY(tokenLoc.y));
-            bValueToReturn = bValueToReturn && (bLine1YNeg && tokenLoc.y <= line1YofX(tokenLoc.x) || (!bLine1YNeg) && tokenLoc.y >= line1YofX(tokenLoc.x));
-            bValueToReturn = bValueToReturn && (bLine2XNeg && tokenLoc.x <= line2XofY(tokenLoc.y) || (!bLine2XNeg) && tokenLoc.x >= line2XofY(tokenLoc.y));
-            bValueToReturn = bValueToReturn && (bLine2YNeg && tokenLoc.y <= line2YofX(tokenLoc.x) || (!bLine2YNeg) && tokenLoc.y >= line2YofX(tokenLoc.x));
-            bValueToReturn = bValueToReturn && (distanceBetween(origin, tokenLoc) <= distanceToPixels(range));
-            return bValueToReturn;
-        }
-        switch (direction){
-            case "up": 
-                bLine1XNeg = false; bLine1YNeg = true;
-                bLine2XNeg = true; bLine2YNeg = true;
-                line1YofX = function(x){
-                    return ((x - origin.x)*2) + origin.y;
-                }
-                line2YofX = function(x){
-                    return -((x - origin.x)*2) + origin.y;
-                }
-                line1XofY = function(y){
-                    return ((y - origin.y)/2) + origin.x;
-                }
-                line2XofY= function(y){
-                    return -((y - origin.y)/2) + origin.x;
-                }
-            break;
-
-            case "down": 
-                bLine1XNeg = false; bLine1YNeg = false;
-                bLine2XNeg = true; bLine2YNeg = false;
-                line1YofX = function(x){
-                    return -((x - origin.x)*2) + origin.y;
-                }
-                line2YofX = function(x){
-                    return ((x - origin.x)*2) + origin.y;
-                }
-                line1XofY = function(y){
-                    return -((y - origin.y)/2) + origin.x;
-                }
-                line2XofY= function(y){
-                    return ((y - origin.y)/2) + origin.x;
-                }
-            break;
-
-            case "left": 
-                bLine1XNeg = true; bLine1YNeg = true;
-                bLine2XNeg = true; bLine2YNeg = false;
-                line1YofX = function(x){
-                    return -((x - origin.x)/2) + origin.y;
-                }
-                line2YofX = function(x){
-                    return ((x - origin.x)/2) + origin.y;
-                }
-                line1XofY = function(y){
-                    return -((y - origin.y)*2) + origin.x;
-                }
-                line2XofY= function(y){
-                    return ((y - origin.y)*2) + origin.x;
-                }
-            break;
-
-            case "right": 
-                bLine1XNeg = false; bLine1YNeg = false;
-                bLine2XNeg = false; bLine2YNeg = true;
-                line1YofX = function(x){
-                    return -((x - origin.x)/2) + origin.y;
-                }
-                line2YofX = function(x){
-                    return ((x - origin.x)/2) + origin.y;
-                }
-                line1XofY = function(y){
-                    return -((y - origin.y)*2) + origin.x;
-                }
-                line2XofY= function(y){
-                    return ((y - origin.y)*2) + origin.x;
-                }
-            break;
-
-            case "upleft": 
-                bLine1XNeg = false; bLine1YNeg = true;
-                bLine2XNeg = true; bLine2YNeg = false;
-                line1YofX = function(x){
-                    return ((x - origin.x)/3) + origin.y;
-                }
-                line2YofX = function(x){
-                    return ((x - origin.x)*3) + origin.y;
-                }
-                line1XofY = function(y){
-                    return ((y - origin.y)*3) + origin.x;
-                }
-                line2XofY= function(y){
-                    return ((y - origin.y)/3) + origin.x;
-                }
-            break;
-
-            case "upright": 
-                bLine1XNeg = false; bLine1YNeg = false;
-                bLine2XNeg = true; bLine2YNeg = true;
-                line1YofX = function(x){
-                    return -((x - origin.x)*3) + origin.y;
-                }
-                line2YofX = function(x){
-                    return -((x - origin.x)/3) + origin.y;
-                }
-                line1XofY = function(y){
-                    return -((y - origin.y)/3) + origin.x;
-                }
-                line2XofY= function(y){
-                    return -((y - origin.y)*3) + origin.x;
-                }
-            break;
-
-            case "downleft": 
-                bLine1XNeg = true; bLine1YNeg = true;
-                bLine2XNeg = true; bLine2YNeg = false;
-                line1YofX = function(x){
-                    return -((x - origin.x)*3) + origin.y;
-                }
-                line2YofX = function(x){
-                    return -((x - origin.x)/3) + origin.y;
-                }
-                line1XofY = function(y){
-                    return -((y - origin.y)/3) + origin.x;
-                }
-                line2XofY= function(y){
-                    return -((y - origin.y)*3) + origin.x;
-                }
-            break;
-
-            case "downright": 
-                bLine1XNeg = true; bLine1YNeg = false;
-                bLine2XNeg = false; bLine2YNeg = true;
-                line1YofX = function(x){
-                    return ((x - origin.x)/3) + origin.y;
-                }
-                line2YofX = function(x){
-                    return ((x - origin.x)*3) + origin.y;
-                }
-                line1XofY = function(y){
-                    return ((y - origin.y)*3) + origin.x;
-                }
-                line2XofY= function(y){
-                    return ((y - origin.y)/3) + origin.x;
-                }
-            break;
-        }
-
-        _.each(listTokensInEncounter, function(token){
-            log("Looking for token" + token.token.get("name"));
-            if(tokenIsConstrainedByLines(token, line1XofY, line1YofX, line2XofY, line2YofX, bLine1XNeg, bLine1YNeg, bLine2XNeg, bLine2YNeg, range)){
-                listTokensToReturn.push(token);
-                log(token.token.get("name") + " is within the cone!");
-            }
-            else{
-                log(token.token.get('name') + " is outside the cone.");
-            }
-        });
-        return listTokensToReturn;
-    },
-
-    findAllTokensInSphere = function(origin,range){
-        var listTokensToReturn = [];
-        _.each(listTokensInEncounter, function(token){
-            log("Looking for token" + token.name);
-            if(distanceBetween(origin,createLocFromToken(token.token)) <= distanceToPixels(range)){
-                listTokensToReturn.push(token);
-                log(token.name + " is inside the sphere");
-            }
-            else{
-                log(token.name + " is outside the sphere");
-            }
-        });
-        return listTokensToReturn;
-
-    },
-
-    findAllTokensInLine = function(origin,direction,range){
-        var listTokensToReturn = [];
-        _.each(listTokensInEncounter, function(token){
-            var tokenLoc = createLocFromToken(token);
-            switch (direction){
-                case "up":
-                    if(tokenLoc.x + 20 >= origin.x && tokenLoc.x - 20 <= origin.x && tokenLoc.y < origin.y && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'right':
-                    if(tokenLoc.y + 20 >= origin.y && tokenLoc.y - 20 <= origin.y && tokenLoc.x >= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'down':
-                    if(tokenLoc.x + 20 >= origin.x && tokenLoc.x - 20 <= origin.x && tokenLoc.y > origin.y && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'left':
-                    if(tokenLoc.y + 20 >= origin.y && tokenLoc.y - 20 <= origin.y && tokenLoc.x <= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'upright':
-                    if(tokenLoc.x-origin.x + 20 >= -(tokenLoc.y-origin.y) && tokenLoc.x-origin.x - 20 <= -(tokenLoc.y-origin.y) && tokenLoc.x >= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'downright':
-                    if(tokenLoc.x-origin.x + 20 >= tokenLoc.y-origin.y && tokenLoc.x-origin.x - 20 <= tokenLoc.y-origin.y && tokenLoc.x >= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'downleft':
-                    if(tokenLoc.x-origin.x + 20 >= tokenLoc.y-origin.y && tokenLoc.x-origin.x - 20 <= tokenLoc.y-origin.y && tokenLoc.x <= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-                case 'upleft':
-                    if(tokenLoc.x-origin.x + 20 >= -(tokenLoc.y-origin.y) && tokenLoc.x-origin.x - 20 <= -(tokenLoc.y-origin.y) && tokenLoc.x <= origin.x && distanceBetween(origin,tokenLoc) <= distanceToPixels(range)){
-                        listTokensToReturn.push(token);
-                    }
-                break;
-            }
-        });
-        return listTokensToReturn;
-    },
-
-    findAllTokensInCube = function(x,y,range){
-
-    },
-
-    findAllTokensInCylinder = function(origin,range,height){
-        var listTokensToReturn = [];
-        _.each(listTokensInEncounter, function(token){
-            log("Looking for token" + token.token.get("name"));
-            if(distanceBetween(origin,createLocFromToken(token)) <= distanceToPixels(range)){
-                listTokensToReturn.push(token);
-                log(token.token.get("name") + " is inside the sphere");
-            }
-            else{
-                log(token.token.get('name') + " is outside the sphere");
-            }
-        });
-        return listTokensToReturn;
-    },
     
     SavingThrowAgainstDamageRollCallback = function(rollData){
         for(var i = 0; i < listTokensWaitingOnSavingThrowsFrom.length; i++){
@@ -1429,30 +993,12 @@ var BattleMaster = BattleMaster || (function() {
         }
     },
 
-    dmgTypeToFXName = function(dmgType){
-        switch(universalizeString(dmgType)){
-            case "fire": return "fire";
-            case "necrotic": return "death";
-            case "radiant": return "holy";
-            case "force": return "magic";
-            case "cold": return "frost";
-            case "acid": return "slime";
-            case "psychic": return "magic";
-            case "lightning": return "smoke";
-            case "poison": return "slime";
-            case "thunder": return "smoke";
-            default: return "magic";
-        }
-    },
-    
     generateTurnOptions = function(){
         
         //Add class specific options as well!
         var optionsToReturn = [
             'Weapon Attack',
-            'Direct Spell',
-            'AOE Spell',
-            'Move'
+            'Direct Spell'
         ];
         return optionsToReturn;
     },
@@ -1460,9 +1006,7 @@ var BattleMaster = BattleMaster || (function() {
     generateTurnOptionCommands = function(){
         var optionsToReturn = [
             'weaponattack',
-            'directspell',
-            'aoespell',
-            'move'
+            'directspell'
         ];
         return optionsToReturn;
     },

@@ -20,7 +20,7 @@ function expect(name, got, want) {
     console.log((pass ? 'PASS' : 'FAIL') + '  ' + name);
 }
 var HandleInput, CancelPendingRolls, findCurrentTurnToken, DirectSpellRollCallback, safeRollTotal, reportMissingRoll;
-var bIsWaitingOnRoll, bIsWaitingOnResponse, responseCallbackFunction, selectedTokenCallbackFunction;
+var bIsWaitingOnRoll, selectedTokenCallbackFunction;
 var listPlayerIDsWaitingOnRollFrom, listRollCallbackFunctions, listTokensWaitingOnSavingThrowsFrom;
 var reticleTokenId, target, currentTurnToken, currentTurnPlayer, currentPlayerDisplayName;
 var chats, prompts, graphics, players, turnorder, parsedRolls, callbackCalls, removed;
@@ -52,14 +52,14 @@ function reset() {
     currentTurnToken = { token: graphics.turn }; currentPlayerDisplayName = 'Alice';
     target = { name: 'Keep this creature' };
     listPlayerIDsWaitingOnRollFrom = []; listRollCallbackFunctions = []; listTokensWaitingOnSavingThrowsFrom = [];
-    bIsWaitingOnRoll = false; bIsWaitingOnResponse = false;
-    responseCallbackFunction = undefined; selectedTokenCallbackFunction = undefined; reticleTokenId = undefined;
+    bIsWaitingOnRoll = false;
+    selectedTokenCallbackFunction = undefined; reticleTokenId = undefined;
 }
 function pending() {
     listPlayerIDsWaitingOnRollFrom = ['A', 'B']; listRollCallbackFunctions = [callbackA, callbackB];
     listTokensWaitingOnSavingThrowsFrom = [{ associatedCharacter: { owner: 'A' } }, { associatedCharacter: { owner: 'B' } }];
-    bIsWaitingOnRoll = true; bIsWaitingOnResponse = true;
-    responseCallbackFunction = callbackA; selectedTokenCallbackFunction = callbackB;
+    bIsWaitingOnRoll = true;
+    selectedTokenCallbackFunction = callbackB;
     reticleTokenId = 'reticle'; graphics.reticle = { remove: function() { removed++; delete graphics.reticle; } };
 }
 function cancel(id, all, who) {
@@ -105,8 +105,6 @@ expect('only remaining callback fires for its owner', callbackCalls.join(','), '
 expect('reticle removed', removed, 1);
 expect('reticle ID cleared', reticleTokenId, undefined);
 expect('selection callback cleared', selectedTokenCallbackFunction, undefined);
-expect('response flag cleared', bIsWaitingOnResponse, false);
-expect('response callback cleared', responseCallbackFunction, undefined);
 expect('target preserved', target, savedTarget);
 expect('turn player cancelling with another expectation pending re-prompts menu', JSON.stringify(prompts),
     JSON.stringify([['Select an action', ['Weapon Attack'], ['weaponattack'], 'Alice']]));
@@ -140,8 +138,6 @@ expect('non-turn caller confirmation does not claim prompts cleared', chats[0],
 expect('non-turn caller preserves reticle', removed, 0);
 expect('non-turn caller preserves reticle ID', reticleTokenId, 'reticle');
 expect('non-turn caller preserves selection callback', selectedTokenCallbackFunction, callbackB);
-expect('non-turn caller preserves response flag', bIsWaitingOnResponse, true);
-expect('non-turn caller preserves response callback', responseCallbackFunction, callbackA);
 
 reset(); pending();
 listPlayerIDsWaitingOnRollFrom = []; listRollCallbackFunctions = []; listTokensWaitingOnSavingThrowsFrom = [];
@@ -152,8 +148,6 @@ expect('idle other player does not remove reticle', removed, 0);
 expect('idle other player preserves reticle graphic', graphics.reticle, savedReticle);
 expect('idle other player preserves reticle ID', reticleTokenId, 'reticle');
 expect('idle other player preserves selection callback', selectedTokenCallbackFunction, callbackB);
-expect('idle other player preserves response flag', bIsWaitingOnResponse, true);
-expect('idle other player preserves response callback', responseCallbackFunction, callbackA);
 expect('idle other player has nothing to cancel', chats[0], '/w "Bob" There was nothing to cancel.');
 expect('idle other player does not re-prompt', prompts.length, 0);
 cancel('A');
@@ -162,8 +156,6 @@ expect('aiming turn player removes reticle', removed, 1);
 expect('aiming turn player removes graphic', graphics.reticle, undefined);
 expect('aiming turn player clears reticle ID', reticleTokenId, undefined);
 expect('aiming turn player clears selection callback', selectedTokenCallbackFunction, undefined);
-expect('aiming turn player clears response flag', bIsWaitingOnResponse, false);
-expect('aiming turn player clears response callback', responseCallbackFunction, undefined);
 expect('aiming turn player confirms prompts cleared', chats[1].includes('cleared the outstanding prompts'), true);
 expect('aiming turn player re-prompts', prompts.length, 1);
 
@@ -173,8 +165,6 @@ expect('no current player still cancels own expectation', listPlayerIDsWaitingOn
 expect('no current player preserves shared reticle', removed, 0);
 expect('no current player preserves reticle ID', reticleTokenId, 'reticle');
 expect('no current player preserves selection callback', selectedTokenCallbackFunction, callbackB);
-expect('no current player preserves response flag', bIsWaitingOnResponse, true);
-expect('no current player preserves response callback', responseCallbackFunction, callbackA);
 expect('no current player confirmation omits prompts', chats[0].includes('cleared'), false);
 expect('no current player does not re-prompt', prompts.length, 0);
 reset(); cancel();
@@ -186,8 +176,6 @@ expect('GM clears all IDs', listPlayerIDsWaitingOnRollFrom.length, 0);
 expect('GM clears all callbacks', listRollCallbackFunctions.length, 0);
 expect('GM clears all saves', listTokensWaitingOnSavingThrowsFrom.length, 0);
 expect('GM clears roll flag', bIsWaitingOnRoll, false);
-expect('GM clears response flag', bIsWaitingOnResponse, false);
-expect('GM clears response callback', responseCallbackFunction, undefined);
 expect('GM clears selection callback', selectedTokenCallbackFunction, undefined);
 expect('GM removes reticle', removed, 1);
 expect('GM clears reticle ID', reticleTokenId, undefined);
@@ -204,8 +192,6 @@ expect('refusal preserves first callback', listRollCallbackFunctions[0], callbac
 expect('refusal preserves second callback', listRollCallbackFunctions[1], callbackB);
 expect('refusal preserves saves', listTokensWaitingOnSavingThrowsFrom.every(function(t, i) { return t === otherSave[i]; }), true);
 expect('refusal preserves roll flag', bIsWaitingOnRoll, true);
-expect('refusal preserves response flag', bIsWaitingOnResponse, true);
-expect('refusal preserves response callback', responseCallbackFunction, callbackA);
 expect('refusal preserves selection callback', selectedTokenCallbackFunction, callbackB);
 expect('refusal preserves reticle ID', reticleTokenId, 'reticle');
 expect('refusal preserves graphic', removed, 0);

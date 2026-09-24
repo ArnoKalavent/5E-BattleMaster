@@ -19,7 +19,7 @@ function expect(name, got, want) {
     if (!pass) { failures++; }
     console.log((pass ? 'PASS' : 'FAIL') + '  ' + name + ' got=' + JSON.stringify(got) + ' want=' + JSON.stringify(want));
 }
-var logs, chats, damage, bIsWaitingOnRoll, bIsWaitingOnResponse = false;
+var logs, chats, damage, bIsWaitingOnRoll;
 var currentPlayerDisplayName, listPlayerIDsWaitingOnRollFrom, listRollCallbackFunctions;
 var listTokensWaitingOnSavingThrowsFrom, currentlyCastingSpellRoll;
 var state = { sCharacterSheetType: 'OGL' };

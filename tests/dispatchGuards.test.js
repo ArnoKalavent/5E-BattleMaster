@@ -20,8 +20,8 @@ function expect(name, got, want) {
     console.log((pass ? 'PASS' : 'FAIL') + '  ' + name);
 }
 var HandleInput, reportRefusedCommand, invokePendingCallback;
-var bInCombat, bIsWaitingOnRoll, bIsWaitingOnResponse, currentTurnPlayer, currentTurnToken;
-var responseCallbackFunction, selectedTokenCallbackFunction, direction, target, listSelectableGraphics;
+var bInCombat, bIsWaitingOnRoll, currentTurnPlayer, currentTurnToken;
+var selectedTokenCallbackFunction, target, listSelectableGraphics;
 var chats, calls, state = {}, callerName;
 function log() {}
 function sendChat(who, message) { chats.push(message); }
@@ -29,7 +29,6 @@ function getObj() { return callerName ? { get: function() { return callerName; }
 function promptTarget() { calls.push('promptTarget'); return true; }
 function WeaponAttack() {}
 function DirectSpellAttack() {}
-function AOESpellAttack() { calls.push('aoespell'); }
 function findTokenAtTarget() { calls.push('findTokenAtTarget'); }
 function StageInitiative() { calls.push('stage'); }
 function BeginCombat(label) { calls.push('begin ' + label); }
@@ -41,10 +40,10 @@ eval('HandleInput = function(msg_orig)' + extract('HandleInput = function(msg_or
 eval('reportRefusedCommand = function(msg, problem)' + extract('function reportRefusedCommand(msg, problem){'));
 eval('invokePendingCallback = function(msg, callback, beforeInvoke)' + extract('function invokePendingCallback(msg, callback, beforeInvoke){'));
 function reset() {
-    bInCombat = true; bIsWaitingOnRoll = false; bIsWaitingOnResponse = false;
+    bInCombat = true; bIsWaitingOnRoll = false;
     currentTurnPlayer = { id: 'turn-player' }; currentTurnToken = { token: {} };
-    responseCallbackFunction = undefined; selectedTokenCallbackFunction = undefined;
-    direction = 'unchanged'; target = 'unchanged'; listSelectableGraphics = ['chosen'];
+    selectedTokenCallbackFunction = undefined;
+    target = 'unchanged'; listSelectableGraphics = ['chosen'];
     chats = []; calls = []; callerName = 'Alice';
 }
 function command(action, who) {
@@ -57,42 +56,28 @@ function refused(action, reason) {
     command(action);
     expect(action + ' whispers caller and reason', chats[0], '/w "Alice" ' + reason);
     expect(action + ' performs no work', calls.length, 0);
-    expect(action + ' preserves direction', direction, 'unchanged');
     expect(action + ' preserves target', target, 'unchanged');
 }
 var nothing = 'There is nothing pending for that command.';
 var noCombat = 'Combat is not running with a current turn.';
 var directions = ['up', 'down', 'left', 'right', 'upright', 'downleft', 'upleft', 'downright'];
-directions.forEach(function(action) {
-    [undefined, null, 'not a function'].forEach(function(callback) {
-        reset(); bIsWaitingOnResponse = true; responseCallbackFunction = callback;
-        refused(action, nothing);
+var unknown = 'Unknown command. Available: !combat begin, !combat end, !combat cancel, !combat set reticle, !combat config.';
+['aoespell', 'move'].concat(directions).forEach(function(action) {
+    [true, false].forEach(function(inCombat) {
+        reset(); bInCombat = inCombat;
+        command(action);
+        expect(action + ' sends exactly one whisper', chats.length, 1);
+        expect(action + ' whispers Unknown command to caller', chats[0], '/w "Alice" ' + unknown);
     });
-    reset(); refused(action, nothing);
-    reset(); responseCallbackFunction = function() { calls.push('stale'); };
-    refused(action, nothing);
-    reset(); bIsWaitingOnResponse = true;
-    responseCallbackFunction = function() {
-        expect(action + ' clears callback before invocation', responseCallbackFunction, undefined);
-        expect(action + ' clears wait before invocation', bIsWaitingOnResponse, false);
-        calls.push('direction');
-    };
-    command(action);
-    expect(action + ' sets direction', direction, action);
-    expect(action + ' invokes once', calls.join(','), 'direction');
-    command(action);
-    expect(action + ' cannot answer twice', calls.join(','), 'direction');
-    expect(action + ' repeated answer whispers', chats[0], '/w "Alice" ' + nothing);
 });
 [undefined, null, 42].forEach(function(callback) {
     reset(); selectedTokenCallbackFunction = callback; refused('selectedTarget', nothing);
 });
-var actions = ['weaponattack', 'directspell', 'aoespell', 'selectedTarget', 'tokenfromlist 0'].concat(directions);
+var actions = ['weaponattack', 'directspell', 'selectedTarget', 'tokenfromlist 0'];
 actions.forEach(function(action) {
     ['outside combat', 'missing player', 'missing wrapper', 'missing token'].forEach(function(mode) {
         reset();
-        bIsWaitingOnResponse = true;
-        responseCallbackFunction = selectedTokenCallbackFunction = function() { calls.push('callback'); };
+        selectedTokenCallbackFunction = function() { calls.push('callback'); };
         if(mode === 'outside combat') { bInCombat = false; currentTurnPlayer = currentTurnToken = undefined; }
         if(mode === 'missing player') { currentTurnPlayer = undefined; }
         if(mode === 'missing wrapper') { currentTurnToken = undefined; }
@@ -101,13 +86,6 @@ actions.forEach(function(action) {
     });
     reset(); bInCombat = false; refused(action, noCombat);
 });
-reset(); bIsWaitingOnResponse = true;
-var nextCallback = function() { calls.push('next'); };
-responseCallbackFunction = function() { responseCallbackFunction = nextCallback; bIsWaitingOnResponse = true; };
-command('up');
-expect('callback can arm next callback', responseCallbackFunction, nextCallback);
-expect('callback can arm next wait', bIsWaitingOnResponse, true);
-command('down'); expect('next prompt works', calls.join(','), 'next');
 reset(); selectedTokenCallbackFunction = function() { calls.push('selected'); };
 command('selectedTarget'); expect('selection looks up target then invokes callback', calls.join(','), 'findTokenAtTarget,selected');
 ['weaponattack', 'directspell'].forEach(function(action) {
@@ -115,11 +93,10 @@ command('selectedTarget'); expect('selection looks up target then invokes callba
     expect(action + ' reaches promptTarget', calls.join(','), 'promptTarget');
     expect(action + ' arms callback', selectedTokenCallbackFunction, action === 'weaponattack' ? WeaponAttack : DirectSpellAttack);
 });
-reset(); command('aoespell'); expect('live AOE dispatch', calls.join(','), 'aoespell');
 reset(); command('tokenfromlist 0'); expect('live list selection', target, 'chosen');
-reset(); callerName = undefined; command('up'); expect('missing name whispers GM', chats[0], '/w GM ' + nothing);
-reset(); callerName = undefined; command('up', 'Bob'); expect('message name fallback', chats[0], '/w "Bob" ' + nothing);
-reset(); callerName = 'Alice "Brave"'; command('up'); expect('quotes sanitized', chats[0], '/w "Alice Brave" ' + nothing);
+reset(); callerName = undefined; command('selectedTarget'); expect('missing name whispers GM', chats[0], '/w GM ' + nothing);
+reset(); callerName = undefined; command('selectedTarget', 'Bob'); expect('message name fallback', chats[0], '/w "Bob" ' + nothing);
+reset(); callerName = 'Alice "Brave"'; command('selectedTarget'); expect('quotes sanitized', chats[0], '/w "Alice Brave" ' + nothing);
 [
     ['roll', 'stage'], ['start', 'stage'], ['begin round 1', 'begin round 1'],
     ['end', 'end'], ['stop', 'end'], ['cancel', 'cancel false'], ['cancel all', 'cancel true'],
@@ -129,6 +106,10 @@ reset(); callerName = 'Alice "Brave"'; command('up'); expect('quotes sanitized',
     reset(); bInCombat = false; currentTurnPlayer = currentTurnToken = undefined;
     command(pair[0], 'Alice');
     expect(pair[0] + ' dispatches outside combat', calls.join(','), pair[1]);
-    expect(pair[0] + ' not refused', chats.length, 0);
+    if (pair[0] === 'DMPConfig') {
+        expect('unknown DMPConfig whispers caller', chats[0], '/w "Alice" ' + unknown);
+    } else {
+        expect(pair[0] + ' not refused', chats.length, 0);
+    }
 });
 if (failures) { process.exit(1); }

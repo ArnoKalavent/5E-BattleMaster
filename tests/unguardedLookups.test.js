@@ -35,11 +35,10 @@ function Campaign() { return { get: function() { return 'page-id'; } }; }
 function findWhoIsControlling(character) { return character && controller; }
 function getAttrByName(id, key) { attrReads.push([id, key]); return ''; }
 function universalizeString(s) { return s.toLowerCase().replace(/ /g, ''); }
-var distanceToPixels, DirectSpellRollCallback, spellEffects, applyDamage;
+var distanceToPixels, DirectSpellRollCallback, applyDamage;
 var SavingThrowAgainstDamageRollCallback, safeRollTotal, reportMissingRoll;
 eval('distanceToPixels = function(dist)' + extract('distanceToPixels = function(dist) {'));
 eval('DirectSpellRollCallback = function(rollData)' + extract('DirectSpellRollCallback = function(rollData){'));
-eval('spellEffects = function(token)' + extract('spellEffects = function(token){'));
 eval('applyDamage = function(dmgAmt, dmgType, targetToken, targetCharacter)' + extract('applyDamage = function(dmgAmt, dmgType, targetToken, targetCharacter){'));
 eval('SavingThrowAgainstDamageRollCallback = function(rollData)' + extract('SavingThrowAgainstDamageRollCallback = function(rollData){'));
 eval('safeRollTotal = function(entry)' + extract('function safeRollTotal(entry){'));
@@ -73,12 +72,12 @@ function reset() {
     expect('normal scale ' + scale, distanceToPixels(5), 70 * (5 / scale));
     expect('normal scale has no warning', logs, []);
 });
-[DirectSpellRollCallback, spellEffects].forEach(function(fn, i) {
+[DirectSpellRollCallback].forEach(function(fn, i) {
     [false, true].forEach(function(resolvable) {
         reset();
         if (resolvable) { controller = 'defender'; player = { get: function() { return 'Defender'; } }; }
         invoke('saving throw whisper site ' + i + ' player=' + resolvable, function() {
-            return fn(i ? target : currentlyCastingSpellRoll);
+            return fn(currentlyCastingSpellRoll);
         });
         expect('whisper recipient and prompt ' + i, chats, ['/w ' + (resolvable ? '"Defender"' : 'GM') + ' Please roll a dexterity saving throw for Goblin']);
         expect('missing controller reported ' + i, logs.some(function(s) { return /No controlling player/.test(s); }), !resolvable);
