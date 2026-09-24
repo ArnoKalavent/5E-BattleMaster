@@ -826,6 +826,37 @@ each was found and have since shifted.
       3. Skip zero-total entries rather than applying them. `dmg2` is `0` on
          every attack that has no second damage, which is most of them.
 
+      ### Second capture: Dueling Style, 2026-09-24
+
+      A different character (Spear +2, Dueling Style, a flat +2 to weapon
+      damage) produced a third shape:
+
+      ```
+      dmg1            = $[[2]]  1d6 +5[CHA] +2[MAGIC]  (rolled 1)  ->  8   applied
+      dmg1type        = Piercing
+      dmg2            = $[[3]]  0                                  ->  0
+      crit1           = $[[4]]  1d6[CRIT]                          ->  5
+      crit2           = $[[5]]  1d8[CRIT]                          ->  1
+      globaldamage    = $[[6]]  2[Dueling Style]  resultType "M"   ->  2   DROPPED
+      globaldamagecrit= $[[7]]  0                                  ->  0
+      globaldamagetype= (EMPTY)
+      ```
+
+      So `globaldamagetype` has at least three shapes in the wild: a real
+      damage type, a non-type label (`Sneak`), and blank. The fallback rule
+      below covers all three.
+
+      Two facts verified by executing `safeRollTotal` against the captured
+      shapes rather than by reading the code:
+
+      - A rider can be a **flat modifier**, not a dice roll (`resultType: "M"`,
+        `signature: false`). `safeRollTotal` returns `2` for it. Nothing that
+        handles riders may assume dice are involved or inspect `rolls`.
+      - The empty `dmg2` returns `0`, **not** `undefined`. A zero total is a
+        skippable entry; only `undefined` means unreadable. Conflating them
+        would make every ordinary attack report a missing damage roll and
+        refuse to resolve.
+
       ### The trap in `globaldamagetype`
 
       It is **free text, not a damage type.** Here it is `Sneak`, which is a
