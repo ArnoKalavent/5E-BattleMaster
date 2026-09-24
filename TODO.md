@@ -658,6 +658,50 @@ each was found and have since shifted.
       inline rolls from a prompted player aren't swallowed
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
+- [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
+      Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
+      Divine Smite used as a rider, elemental rider damage, a versatile second
+      damage type - show in the chat template but are never subtracted from the
+      target's HP.
+
+      **Confirmed cause.** In the OGL branch of `rollData`, the second damage
+      extraction is commented out:
+
+      ```js
+      //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');    // line 104
+      //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');    // line 108
+      ```
+
+      The Shaped branch reads its equivalent fields (`attack_second_damage`,
+      `attack_second_damage_type`, lines 128 and 132), so this gap exists only
+      on the sheet V1 actually targets.
+
+      **The consumer is already correct and waiting.** `WeaponAttackRollCallback`
+      (747-756) reads `dmgRolls[1]`, guards it with `safeRollTotal`, and calls
+      `applyDamage` a second time with `dmgTypes[1]`. `DirectSpellRollCallback`
+      (~830) does the same. Because the parser can never push a second entry on
+      OGL, `dmgRolls.length` is always 1 and that entire branch is dead code.
+      Uncommenting two lines is most of the fix.
+
+      **Open question - do not assume `dmg2` is the whole answer.** Matt reports
+      the bonus damage rendering *above* the standard damage. In the OGL attack
+      template `dmg2` renders *below* `dmg1`, so the rider he saw may be arriving
+      in a different field - the sheet's global damage modifier
+      (`globaldamage` / `globaldamagetype`) is the likely candidate, and Sneak
+      Attack and Divine Smite are both commonly configured that way rather than
+      as a weapon's second damage.
+
+      **The evidence that settles it:** the raw `msg.content` of one such attack.
+      Capture the template text from the API console during a smoke test and
+      check which field names carry the rider. If it is `dmg2`, uncomment two
+      lines and add tests. If it is `globaldamage`, the parser needs a third
+      damage slot and `dmgRolls` stops being a two-element assumption - which
+      also means the fixed-arity `dmgRolls[0]`/`dmgRolls[1]` shape in both
+      callbacks should become a loop. Decide after seeing the string.
+
+      Distinct from the damage-only rider item below, which is about a rider
+      arriving as its own message with no to-hit roll. This one is a rider
+      inside a normal weapon attack message.
 - [ ] **Damage-only riders (Divine Smite and similar).** Found live 2026-09-23.
       Divine Smite is not a spell attack: it has no to-hit roll and no saving
       throw, it is extra radiant damage on a melee hit already made. Its roll
