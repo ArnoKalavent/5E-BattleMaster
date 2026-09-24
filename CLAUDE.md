@@ -13,7 +13,12 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
 
 ## Scope decisions for V1 (settled - do not reopen without asking)
 
-- Target character sheet: D&D 5E by Roll20 (2014).
+- Target character sheet: **D&D 5e OGL by Roll20**. Corrected 2026-09-24:
+  this previously read "D&D 5E by Roll20 (2014)", which is a DIFFERENT sheet
+  with different roll-template fields - it emits `weapondamage`, not `dmg1` /
+  `globaldamage`. Live captures confirm the game runs the OGL sheet, so the
+  script's internal name for it was right and this line was wrong. The
+  definitive `atkdmg` field list is in `TODO.md` under "Definitive field list".
 - Shaped sheet support is being removed - the code is deleted, leaving the script
   unconditionally OGL. **Other sheet types are a fork, not a branch** (settled
   2026-09-24). If D&D 2024/Beacon or another sheet is wanted, fork this script

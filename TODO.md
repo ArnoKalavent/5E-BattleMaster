@@ -857,6 +857,76 @@ each was found and have since shifted.
         would make every ordinary attack report a missing damage roll and
         refuse to resolve.
 
+      ### Definitive field list, researched 2026-09-24
+
+      Researched rather than inferred, after two captures suggested a pattern
+      but could not prove completeness. Sources and their limits are at the end
+      of this section - read those before trusting the list.
+
+      The sheet is **D&D 5e OGL by Roll20**, whose `atkdmg` roll template
+      carries these fields:
+
+      ```
+      mod  rname  r1  always  r2  attack  range  damage
+      dmg1flag  dmg1  dmg1type
+      dmg2flag  dmg2  dmg2type
+      crit1  crit2
+      globalattack  globaldamage  globaldamagecrit  globaldamagetype
+      hldmg  spelllevel
+      save  saveattr  savedesc  savedc
+      desc  ammo  charname
+      ```
+
+      **Damage-bearing fields, which is what matters here:**
+
+      | Field | Carries | Type comes from | In V1? |
+      |---|---|---|---|
+      | `dmg1` | primary damage | `dmg1type` | yes |
+      | `dmg2` | secondary damage | `dmg2type` | yes |
+      | `globaldamage` | global damage modifier | `globaldamagetype` (see below) | yes |
+      | `hldmg` | higher-level spell damage | inherits; there is NO `hldmgtype` | yes |
+      | `crit1` / `crit2` | crit dice | `dmg1type` / `dmg2type` | no - crits are V2 |
+      | `globaldamagecrit` | global crit damage | `globaldamagetype` | no - crits are V2 |
+      | `hldmgcrit` | higher-level crit damage | inherits | no - and undocumented |
+
+      **`hldmg` was the find.** It was not in either capture, because both were
+      weapon attacks. It carries the extra damage when a spell is cast above
+      its base level - a 5th-level Fireball puts the additional 2d6 there. That
+      is Direct Spell, which IS V1 core, so omitting it would have produced
+      exactly the recurring under-damage this research was commissioned to
+      prevent. It has no type field of its own and inherits from `dmg1type`.
+
+      **What research CANNOT settle, and why the heuristic stays.**
+      `globaldamagetype` is populated from `@{character|global_damage_type}`, a
+      user-entered character attribute. It is free text by design. No
+      documentation can enumerate its values, because they are whatever the
+      player typed - `Sneak`, blank and a real damage type have all been
+      observed. The fallback rule is therefore not a workaround for missing
+      documentation; it is the correct response to a field that is
+      deliberately unconstrained.
+
+      **Sources and their limits.** The primary pages - the Roll20 Help Center
+      article on 5e OGL Roll Templates and the Roll20 wiki - are Cloudflare
+      protected and returned 403 to every fetch attempted, including with a
+      browser user agent. The field list above comes from search-result
+      summaries of those same pages plus community forum posts, cross-checked
+      against the two live captures, which agree with it exactly. The OGL
+      sheet's HTML source could not be obtained either: the
+      `Roll20/roll20-character-sheets` repo's `DnD_5e` directory is the NEWER
+      "D&D 5E by Roll20" sheet, which uses `weapondamage` and has zero
+      occurrences of `globaldamage` - confirmed by downloading and grepping it.
+      The OGL sheet is not in the first 1000 entries of that repo.
+
+      **Therefore `hldmg` is the one item not confirmed by a capture.** Before
+      relying on it, cast a spell above its base level and check the logged
+      `msg.content` for an `hldmg` field. Cheap, and it closes the last gap.
+
+      **A scope correction this turned up.** `CLAUDE.md` names the target sheet
+      as "D&D 5E by Roll20 (2014)". The captures show the game is actually
+      running **D&D 5e OGL by Roll20**, a different sheet with different
+      template fields. The script's internal name for it, `"OGL"`, was right
+      all along; the documentation was not.
+
       ### The trap in `globaldamagetype`
 
       It is **free text, not a damage type.** Here it is `Sneak`, which is a
