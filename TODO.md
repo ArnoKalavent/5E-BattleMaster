@@ -791,6 +791,28 @@ each was found and have since shifted.
 - [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
       **V1 CORE BLOCKER (2026-09-24, final).** Briefly moved to stretch and put
       back the same day: a rogue's Sneak Attack is most of a rogue's damage, so
+
+      **Reference implementation, preserved before deletion (2026-09-24).** The
+      Shaped branch is currently the ONLY path in the script that reads a second
+      damage roll, and Shaped is about to be removed. Its shape is recorded here
+      so the OGL implementation has something to copy:
+
+      ```js
+      dmg2Index  = extractInlineRollIndex(content, 'attack_second_damage');
+      crit2Index = extractInlineRollIndex(content, 'attack_second_damage_crit');
+      dmgType2   = extractTemplateText(content, 'attack_second_damage_type');
+      // then, in the shared tail:
+      if(dmg2Index !== undefined && inlineData[dmg2Index]){
+          this.dmgRolls.push(inlineData[dmg2Index]);
+          this.dmgTypes.push(universalizeString(dmgType2 || ""));
+      }
+      ```
+
+      The OGL equivalents are `dmg2`, `crit2` and `dmg2type`, commented out at
+      lines 104, 106 and 108. The shared tail at the bottom of `rollData` is NOT
+      sheet-specific and already handles a second entry, so it survives the
+      Shaped removal untouched. Both consumers (`WeaponAttackRollCallback`,
+      `DirectSpellRollCallback`) already read `dmgRolls[1]`.
       dropping it silently reports the wrong number on most of that player's turns.
       Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
       Divine Smite used as a rider, elemental rider damage, a versatile second

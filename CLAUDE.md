@@ -14,7 +14,16 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
 ## Scope decisions for V1 (settled - do not reopen without asking)
 
 - Target character sheet: D&D 5E by Roll20 (2014).
-- Shaped sheet support is being removed. Beacon / 2024 sheet support is deferred to V2.
+- Shaped sheet support is being removed - the code is deleted, leaving the script
+  unconditionally OGL. **Other sheet types are a fork, not a branch** (settled
+  2026-09-24). If D&D 2024/Beacon or another sheet is wanted, fork this script
+  and adapt it; do not add a sheet-adapter layer or a second set of branches
+  here. The reasoning: a sheet abstraction designed against one sheet is a
+  guess, and the known second candidate would break the obvious guess anyway -
+  Beacon uses async `getSheetItem`/`setSheetItem` and HTML roll parsing, not a
+  different set of template field names. What actually makes another sheet
+  cheap is one normalised `rollData` shape with no sheet checks downstream,
+  which having a single sheet gives for free.
 - DeathMarkersPlus no longer exists. Status markers of every kind - native and
   custom - are deferred to V2. V1 does not touch `statusmarkers` at all. (This
   line previously said V1 uses native markers; superseded 2026-09-24 by the V1
