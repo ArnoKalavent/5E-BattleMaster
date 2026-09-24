@@ -3,6 +3,8 @@ var BattleMaster = BattleMaster || (function() {
 
     /* BUILD REVISION — filled in by tools/build.js for distribution */
     var buildRev = 'dev (unstamped)';
+    const damageTypes = ['acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning', 'necrotic',
+        'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder'];
     
     var bInCombat, bStagingInitiative, bIsWaitingOnRoll, selectedTokenCallbackFunction,
     sLastPromptedTurnID, iLastTurnorderLength = 0,
@@ -79,8 +81,8 @@ var BattleMaster = BattleMaster || (function() {
     function rollData(rollMsg){
         log("Creating RollData object!");
         var inlineData = rollMsg.inlinerolls || [];
-        var r1Index, r2Index, dmg1Index, dmg2Index, crit1Index, crit2Index, saveDCIndex;
-        var dmgType1, dmgType2, saveType;
+        var r1Index, r2Index, dmg1Index, dmg2Index, crit1Index, crit2Index, saveDCIndex, globalDmgIndex, hlDmgIndex;
+        var dmgType1, dmgType2, saveType, globalDmgType;
         log("Inline data: " + JSON.stringify(inlineData));
         log(rollMsg.content);
         this.playerid = rollMsg.playerid;
@@ -96,11 +98,17 @@ var BattleMaster = BattleMaster || (function() {
         r2Index = extractInlineRollIndex(rollMsg.content, 'r2');
         saveDCIndex = extractInlineRollIndex(rollMsg.content, 'savedc');
         dmg1Index = extractInlineRollIndex(rollMsg.content, 'dmg1');
-        //dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');
+        dmg2Index = extractInlineRollIndex(rollMsg.content, 'dmg2');
         crit1Index = extractInlineRollIndex(rollMsg.content, 'crit1');
-        //crit2Index = extractInlineRollIndex(rollMsg.content, 'crit2');
+        // Critical secondary damage remains out of scope.
         dmgType1 = extractTemplateText(rollMsg.content, 'dmg1type');
-        //dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');
+        dmgType2 = extractTemplateText(rollMsg.content, 'dmg2type');
+        globalDmgIndex = extractInlineRollIndex(rollMsg.content, 'globaldamage');
+        globalDmgType = universalizeString(extractTemplateText(rollMsg.content, 'globaldamagetype') || "");
+        if(damageTypes.indexOf(globalDmgType) === -1){
+            globalDmgType = universalizeString(dmgType1 || "");
+        }
+        hlDmgIndex = extractInlineRollIndex(rollMsg.content, 'hldmg');
         this.rangeString = extractTemplateText(rollMsg.content, 'range') || "";
         saveType = extractTemplateText(rollMsg.content, 'saveattr');
         this.bRequiresSavingThrow = saveType !== undefined;
@@ -116,6 +124,14 @@ var BattleMaster = BattleMaster || (function() {
         if(dmg2Index !== undefined && inlineData[dmg2Index]){
             this.dmgRolls.push(inlineData[dmg2Index]);
             this.dmgTypes.push(universalizeString(dmgType2 || ""));
+        }
+        if(globalDmgIndex !== undefined && inlineData[globalDmgIndex]){
+            this.dmgRolls.push(inlineData[globalDmgIndex]);
+            this.dmgTypes.push(globalDmgType);
+        }
+        if(hlDmgIndex !== undefined && inlineData[hlDmgIndex]){
+            this.dmgRolls.push(inlineData[hlDmgIndex]);
+            this.dmgTypes.push(universalizeString(dmgType1 || ""));
         }
     }
     function tokenWrapper(token){
@@ -695,15 +711,18 @@ var BattleMaster = BattleMaster || (function() {
         if(target.ac <= toHit){
             log("Hit! Enemy AC is " + target.ac + " and roll result was " + toHit);
             sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Target: ' + target.name);
-            var damage = safeRollTotal(rollData.dmgRolls[0]);
-            var secondaryDamage = safeRollTotal(rollData.dmgRolls[1]);
-            if(damage === undefined || (rollData.dmgRolls.length > 1 && secondaryDamage === undefined)){
+            var damageTotals = [];
+            for(var i = 0; i < rollData.dmgRolls.length; i++){
+                damageTotals.push(safeRollTotal(rollData.dmgRolls[i]));
+            }
+            if(!damageTotals.length || damageTotals.indexOf(undefined) !== -1){
                 reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
                 return false;
             }
-            applyDamage(damage, rollData.dmgTypes[0], target.token, target.associatedCharacter);
-            if(secondaryDamage !== undefined && secondaryDamage != 0){
-                applyDamage(secondaryDamage, rollData.dmgTypes[1], target.token, target.associatedCharacter);
+            for(var j = 0; j < damageTotals.length; j++){
+                if(damageTotals[j] !== 0){
+                    applyDamage(damageTotals[j], rollData.dmgTypes[j], target.token, target.associatedCharacter);
+                }
             }
             spawnFx(target.token.get('left'), target.token.get('top'), 'glow-blood');
         }
@@ -772,15 +791,18 @@ var BattleMaster = BattleMaster || (function() {
             if(ac <= toHit){
                 log("Hit! Enemy AC is " + ac + " and roll result was " + toHit);
                 sendChat("BattleMaster", '/w "' + currentPlayerDisplayName + '" Hit! Target: ' + target.get('name'));
-                var damage = safeRollTotal(rollData.dmgRolls[0]);
-                var secondaryDamage = safeRollTotal(rollData.dmgRolls[1]);
-                if(damage === undefined || (rollData.dmgRolls.length > 1 && secondaryDamage === undefined)){
+                var damageTotals = [];
+                for(var i = 0; i < rollData.dmgRolls.length; i++){
+                    damageTotals.push(safeRollTotal(rollData.dmgRolls[i]));
+                }
+                if(!damageTotals.length || damageTotals.indexOf(undefined) !== -1){
                     reportMissingRoll("The damage roll was not present in the message or was unreadable; enable your sheet's \"Auto Roll Damage & Crit\" setting (the usual cause) and retry the attack.");
                     return false;
                 }
-                applyDamage(damage, rollData.dmgTypes[0], target.token, target.associatedCharacter);
-                if(secondaryDamage !== undefined && secondaryDamage != 0){
-                    applyDamage(secondaryDamage, rollData.dmgTypes[1], target.token, target.associatedCharacter);
+                for(var j = 0; j < damageTotals.length; j++){
+                    if(damageTotals[j] !== 0){
+                        applyDamage(damageTotals[j], rollData.dmgTypes[j], target.token, target.associatedCharacter);
+                    }
                 }
             }
         }

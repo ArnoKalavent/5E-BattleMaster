@@ -36,7 +36,8 @@ function applyDamage(amount, type, token) {
     // Exercise the write that crashes when a tokenWrapper reaches applyDamage.
     token.set('bar2_value', amount);
 }
-function spawnFx() {}
+var effects;
+function spawnFx() { effects++; }
 function getObj() { return { get: function() { return 'Defender'; } }; }
 function getAttrByName() { return 12; }
 function Campaign() { return graphic; }
@@ -55,7 +56,7 @@ eval('HandleInput = function(msg_orig)' + extract('HandleInput = function(msg_or
 function roll(n) { return { results: { total: n } }; }
 function valid() { return { d20Rolls: [roll(18)], dmgRolls: [roll(8)], dmgTypes: ['fire'], dc: roll(14), saveEffects: 'half damage', saveType: 'dexterity', playerid: 'defender' }; }
 function reset(callback) {
-    logs = []; chats = []; damage = []; graphicWrites = [];
+    logs = []; chats = []; damage = []; graphicWrites = []; effects = 0;
     bIsWaitingOnRoll = true; currentPlayerDisplayName = 'Caster';
     listPlayerIDsWaitingOnRollFrom = ['defender']; listRollCallbackFunctions = [callback];
     listTokensWaitingOnSavingThrowsFrom = [target]; currentlyCastingSpellRoll = valid();
@@ -200,5 +201,36 @@ expect('new save expectation retained', listPlayerIDsWaitingOnRollFrom, ['defend
 expect('only new save callback remains', listRollCallbackFunctions.length, 1);
 expect('new save callback retained', listRollCallbackFunctions[0] === SavingThrowAgainstDamageRollCallback, true);
 expect('new save keeps waiting', bIsWaitingOnRoll, true);
+// Parse the captured templates through the complete module before callback dispatch.
+var vm = require('vm');
+var context = { state: {}, log: function() {}, on: function() {} };
+vm.runInNewContext(src.replace('BuildRev: buildRev,', 'BuildRev: buildRev, rollData: rollData,'), context);
+var fixtures = require('./riderFixtures');
+[WeaponAttackRollCallback, DirectSpellRollCallback].forEach(function(fn, index) {
+    var prefix = index ? 'spell rider' : 'weapon rider';
+    ['sneak', 'dueling', 'upcast'].forEach(function(name) {
+        reset(fn);
+        var data = new context.BattleMaster.rollData(fixtures[name]);
+        expect(prefix + ' ' + name + ' accepted', fn(data), true);
+        var wanted = name === 'sneak' ? [[12, 'piercing'], [7, 'piercing']] : name === 'dueling' ? [[8, 'piercing'], [2, 'piercing']] : [[28, 'fire'], [7, 'fire']];
+        expect(prefix + ' ' + name + ' exact applications', damage.map(function(d) { return d.slice(0, 2); }), wanted);
+        expect(prefix + ' ' + name + ' FX count', effects, index ? 0 : 1);
+    });
+    reset(fn);
+    var many = valid();
+    many.dmgRolls = [roll(0), roll(2), roll(3), roll(4), roll(5)];
+    many.dmgTypes = ['fire', 'cold', 'radiant', 'piercing', 'force'];
+    fn(many);
+    expect(prefix + ' arbitrary entry count and zero primary', damage.map(function(d) { return d.slice(0, 2); }), [[2, 'cold'], [3, 'radiant'], [4, 'piercing'], [5, 'force']]);
+    reset(fn);
+    var bad = valid(); bad.dmgRolls = [roll(12), roll(0), roll(7), {}];
+    missing(prefix + ' unreadable late entry', fn, bad, 'Auto Roll Damage & Crit');
+    expect(prefix + ' rejected attack has no FX', effects, 0);
+    invoke(prefix + ' dispatch unreadable rider', HandleInput, { type: 'general', playerid: 'defender', inlinerolls: [], parsed: bad });
+    expect(prefix + ' retains expectation ID', listPlayerIDsWaitingOnRollFrom, ['defender']);
+    expect(prefix + ' retains callback', listRollCallbackFunctions[0] === fn, true);
+    expect(prefix + ' retains wait flag', bIsWaitingOnRoll, true);
+    expect(prefix + ' no partial damage before retry', damage, []);
+});
 console.log('\nSafe rolls: ' + failures + ' failure(s)');
 process.exitCode = failures ? 1 : 0;
