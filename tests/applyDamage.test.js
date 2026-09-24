@@ -74,51 +74,77 @@ expect('temp HP absorbs all damage without writing HP', function() {
         var bars = f.hit(5, 'fire');
         return [bars, f.world.logs.includes('BattleMaster: No linked character for Target; applying damage without immunities, resistances or vulnerabilities.')];
     }, [[undefined, 15], true]);
-    // DEFECT: 5e rounds resisted damage DOWN to 2, leaving 18 HP.
-    // TODO.md: "Resistance rounds the wrong way". Flip 17 to 18 when fixed.
-    expect('DEFECT ' + sheet + ' resistance rounds .5 up (5 -> 3, should be 2)', function() {
+    expect(sheet + ' resistance is logged whether or not the target has temp HP', function() {
+        // The log is the GM's evidence that resistance applied. It lived only in
+        // the no-temp-HP branch, so a resisted hit on a target with temp HP was
+        // halved silently.
+        var attrs = {};
+        attrs[prefix + 'resistances'] = 'fire';
+        var line = 'Defender has resistance to fire damage!';
+        var withTemp = fixture(sheet, attrs, 6, 20);
+        withTemp.hit(5, 'fire');
+        var without = fixture(sheet, attrs, 0, 20);
+        without.hit(5, 'fire');
+        return [withTemp.world.logs.includes(line), without.world.logs.includes(line)];
+    }, [true, true]);
+    expect(sheet + ' resistance rounds 5 damage down to 2', function() {
         var attrs = {};
         attrs[prefix + 'resistances'] = 'fire';
         return fixture(sheet, attrs, 0, 20).hit(5, 'fire');
-    }, [0, 17]);
+    }, [0, 18]);
 });
 
-// DEFECT: a blank temp bar should remain blank and use the HP-only path,
-// producing only [['bar3_value', 15]], rather than writing a spurious zero.
-expect('DEFECT blank temp HP takes the temp-HP path', function() {
+expect('blank temp HP uses the HP-only path', function() {
     var f = fixture('OGL', {}, '', 20);
     f.hit(5, 'fire');
     return f.token.writes;
-}, [['bar2_value', 0], ['bar3_value', 15]]);
-// DEFECT: blank HP must not become negative HP; invalid/missing HP should
-// remain blank pending validation, so the correct bars are ['', ''].
-expect('DEFECT both blank bars become zero temp HP and negative HP', function() {
-    return fixture('OGL', {}, '', '').hit(5, 'fire');
-}, [0, -5]);
-// DEFECT: invalid HP should be rejected and remain 'unknown', never NaN.
-// deepStrictEqual explicitly distinguishes NaN from null/undefined.
-expect('DEFECT non-numeric HP writes NaN', function() {
-    return fixture('OGL', {}, 0, 'unknown').hit(5, 'fire');
-}, [0, NaN]);
-// DEFECT: invalid bars should remain unchanged until validated:
-// ['unknown', 'unknown'], rather than persisting NaN in HP.
-expect('DEFECT non-numeric bars bypass temp HP and write NaN', function() {
-    return fixture('OGL', {}, 'unknown', 'unknown').hit(5, 'fire');
-}, ['unknown', NaN]);
-// DEFECT: an unspecified damage type should not match fire resistance;
-// 6 damage should leave 14 HP, not 17.
-expect('DEFECT empty damage type matches non-empty resistance', function() {
+}, [['bar3_value', 15]]);
+[
+    ['both blank bars remain unchanged', '', ''],
+    ['non-numeric HP remains unchanged', 0, 'unknown'],
+    ['non-numeric bars remain unchanged', 'unknown', 'unknown'],
+    ['missing HP remains unchanged', 3, undefined],
+    ['whitespace HP remains unchanged', 3, '   '],
+    ['infinite HP remains unchanged', 3, Infinity]
+].forEach(function(test) {
+    expect(test[0] + ' and notify the GM once', function() {
+        var f = fixture('OGL', {}, test[1], test[2]);
+        var bars = f.hit(5, 'fire');
+        var message = "Target has no usable HP bar (bar3), so 5 damage was not applied. Set the token's bar3 to a number.";
+        return [bars, f.token.writes, f.world.chats, f.world.logs.includes('BattleMaster: ' + message)];
+    }, [[test[1], test[2]], [], [{ who: 'BattleMaster', message: "/w GM Target has no usable HP bar (bar3), so 5 damage was not applied. Set the token's bar3 to a number." }], true]);
+});
+expect('empty damage type ignores non-empty resistance', function() {
     return fixture('OGL', { npc_resistances: 'fire' }, 0, 20).hit(6, '');
-}, [0, 17]);
-// DEFECT: an unspecified type should not match immunity; correct HP is 14.
-expect('DEFECT empty damage type matches non-empty immunity', function() {
+}, [0, 14]);
+expect('empty damage type ignores non-empty immunity', function() {
     return fixture('OGL', { npc_immunities: 'cold', npc_resistances: 'fire' }, 0, 20).hit(6, '');
-}, [0, 20]);
-// DEFECT: even an empty immunity string matches empty damage type;
-// correct HP is 14, with no immunity or resistance applied.
-expect('DEFECT empty damage type matches empty immunity before resistance', function() {
+}, [0, 14]);
+expect('empty damage type ignores empty immunity and resistance', function() {
     return fixture('OGL', { npc_immunities: '', npc_resistances: 'fire' }, 0, 20).hit(6, '');
-}, [0, 20]);
+}, [0, 14]);
+[undefined, 0, 2, 3, 10].forEach(function(temp) {
+    expect('save-for-half 3.5 damage floors to 3 with temp HP ' + temp, function() {
+        return fixture('OGL', {}, temp, 20).hit(3.5, 'fire');
+    }, [temp === undefined ? undefined : Math.max(0, temp - 3), 20 - Math.max(0, 3 - (temp || 0))]);
+    expect('resisted odd damage floors to 2 with temp HP ' + temp, function() {
+        return fixture('OGL', { npc_resistances: 'fire' }, temp, 20).hit(5, 'fire');
+    }, [temp === undefined ? undefined : Math.max(0, temp - 2), 20 - Math.max(0, 2 - (temp || 0))]);
+    expect('fractional vulnerable damage floors after doubling with temp HP ' + temp, function() {
+        return fixture('OGL', { npc_vulnerabilities: 'fire' }, temp, 20).hit(3.75, 'fire');
+    }, [temp === undefined ? undefined : Math.max(0, temp - 7), 20 - Math.max(0, 7 - (temp || 0))]);
+    expect('whitespace damage type ignores vulnerability with temp HP ' + temp, function() {
+        return fixture('OGL', { npc_vulnerabilities: 'fire' }, temp, 20).hit(6, '   ');
+    }, [temp === undefined ? undefined : Math.max(0, temp - 6), 20 - Math.max(0, 6 - (temp || 0))]);
+});
+expect('non-numeric temp HP uses the HP-only path', function() {
+    var f = fixture('OGL', {}, 'unknown', '20');
+    f.hit(5, 'fire');
+    return f.token.writes;
+}, [['bar3_value', 15]]);
+expect('numeric string temp HP absorbs damage', function() {
+    return fixture('OGL', {}, '3', '20').hit(5, 'fire');
+}, [0, 18]);
 // A stale persisted setting cannot disable OGL resistance handling.
 expect('resistance applies regardless of leftover state value', function() {
     return fixture('custom', { npc_resistances: 'fire' }, 0, 20).hit(6, 'fire');

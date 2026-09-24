@@ -875,59 +875,76 @@ var BattleMaster = BattleMaster || (function() {
         var immunitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_immunities") : undefined,
         resistancesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_resistances") : undefined,
         vulnerabilitiesRaw = targetCharacter ? getAttrByName(targetCharacter.id,"npc_vulnerabilities") : undefined;
-        var tempHP = targetToken.get('bar2_value');
-        if(immunitiesRaw != undefined && universalizeString(immunitiesRaw).indexOf(universalizeString(dmgType)) != -1){
+        var damageType = universalizeString(dmgType);
+        if(!damageType){
+            immunitiesRaw = resistancesRaw = vulnerabilitiesRaw = undefined;
+        }
+        var hp = targetToken.get('bar3_value');
+        if(hp == null || String(hp).trim() === '' || !isFinite(Number(hp))){
+            var message = targetToken.get('name') + " has no usable HP bar (bar3), so " + dmgAmt + " damage was not applied. Set the token's bar3 to a number.";
+            sendChat("BattleMaster", "/w GM " + message);
+            log("BattleMaster: " + message);
+            return;
+        }
+        var tempHP = Number(targetToken.get('bar2_value'));
+        if(!isFinite(tempHP)){
+            tempHP = 0;
+        }
+        if(immunitiesRaw != undefined && universalizeString(immunitiesRaw).indexOf(damageType) != -1){
             return;
         } 
-        else if(tempHP >= 0){
-            if(vulnerabilitiesRaw != undefined && universalizeString(vulnerabilitiesRaw).indexOf(universalizeString(dmgType)) != -1){
-                if(tempHP >= Math.round(2*dmgAmt)){
-                    targetToken.set('bar2_value', tempHP - Math.round(2*dmgAmt));
+        else if(tempHP > 0){
+            if(vulnerabilitiesRaw != undefined && universalizeString(vulnerabilitiesRaw).indexOf(damageType) != -1){
+                if(tempHP >= Math.floor(2*dmgAmt)){
+                    targetToken.set('bar2_value', tempHP - Math.floor(2*dmgAmt));
                 }
                 else{
                     targetToken.set('bar2_value', 0);
-                    var dmgLeft = Math.round(2*dmgAmt) - tempHP;
+                    var dmgLeft = Math.floor(2*dmgAmt) - tempHP;
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
                 }
                 return;
             }
-            else if(resistancesRaw != undefined && universalizeString(resistancesRaw).indexOf(universalizeString(dmgType)) != -1){
-                if(tempHP >= Math.round(dmgAmt/2)){
-                    targetToken.set('bar2_value', tempHP - Math.round(dmgAmt/2));
+            else if(resistancesRaw != undefined && universalizeString(resistancesRaw).indexOf(damageType) != -1){
+                log(targetCharacter.get('name') + " has resistance to " + dmgType +" damage!")
+                if(tempHP >= Math.floor(dmgAmt/2)){
+                    targetToken.set('bar2_value', tempHP - Math.floor(dmgAmt/2));
                 }
                 else{
                     targetToken.set('bar2_value', 0);
-                    var dmgLeft = Math.round(dmgAmt/2) - tempHP;
+                    var dmgLeft = Math.floor(dmgAmt/2) - tempHP;
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
                 }
                 
                 return;
             }
             else{
-                if(tempHP >= dmgAmt){
-                    targetToken.set('bar2_value', tempHP - dmgAmt);
+                if(tempHP >= Math.floor(dmgAmt)){
+                    targetToken.set('bar2_value', tempHP - Math.floor(dmgAmt));
                 }
                 else{
                     targetToken.set('bar2_value', 0);
-                    var dmgLeft = dmgAmt - tempHP;
+                    var dmgLeft = Math.floor(dmgAmt) - tempHP;
                     targetToken.set('bar3_value', targetToken.get('bar3_value') - dmgLeft);
                 }
                 return;
             }
         }
         else{
-            if(vulnerabilitiesRaw != undefined && universalizeString(vulnerabilitiesRaw).indexOf(universalizeString(dmgType)) != -1){
-                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(2*dmgAmt));
+            if(targetToken.get('bar2_value') === 0 || targetToken.get('bar2_value') === '0'){
+                targetToken.set('bar2_value', 0);
+            }
+            if(vulnerabilitiesRaw != undefined && universalizeString(vulnerabilitiesRaw).indexOf(damageType) != -1){
+                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.floor(2*dmgAmt));
                 return;
             }
-            else if(resistancesRaw != undefined && universalizeString(resistancesRaw).indexOf(universalizeString(dmgType)) != -1){
+            else if(resistancesRaw != undefined && universalizeString(resistancesRaw).indexOf(damageType) != -1){
                 log(targetCharacter.get('name') + " has resistance to " + dmgType +" damage!")
-                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(dmgAmt/2));
+                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.floor(dmgAmt/2));
                 return;
             }
             else{
-                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.round(dmgAmt));
-                return;
+                targetToken.set('bar3_value', targetToken.get('bar3_value') - Math.floor(dmgAmt));
             }
         }
     },
