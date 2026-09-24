@@ -89,6 +89,40 @@ new whole-file compile test, which the suite did not previously have.
 
 ---
 
+## V1 done-definition, 2026-09-24
+
+Matt's call, settled. **V1 is done when Weapon Attack and Direct Spell resolve
+correctly end to end**: right target, right to-hit, right damage including
+rider damage and resistances. Nothing beyond that.
+
+Explicitly NOT in V1, and each is already partly built, which is why they need
+saying out loud:
+
+- **Crits.** `crit1Index` is extracted by the parser today and never read;
+  `critRolls`/`critTypes` are initialised and never populated. Leave it that way.
+- **Advantage/disadvantage.** `r2` is parsed into `d20Rolls[1]`; every consumer
+  reads `[0]`. Leave it that way.
+- **Status markers.** Nothing marks dead, unconscious or bloodied, and nothing
+  should in V1. `CLAUDE.md` previously said V1 would use native markers; that
+  line is superseded.
+
+Extracting a field is not the same as shipping the feature. V1 discards these
+deliberately rather than half-supporting them.
+
+### What this makes a blocker
+
+- Rider damage (Sneak Attack, Divine Smite): currently parsed and dropped,
+  because `dmg2`/`dmg2type` are commented out in the OGL branch. In scope.
+- Resistances, immunities and vulnerabilities: landed in 2276a51, unverified
+  live. Gate 4 confirms them.
+- `tokenfromlist` assigning a raw Graphic: makes every attack after a
+  disambiguation prompt a guaranteed miss. Wrong target, so in scope.
+- AC coerced from an unvalidated string: wrong to-hit. In scope.
+- Resistance rounding `.5` up rather than down: wrong damage. In scope.
+- Empty damage type matching every immunity: wrong damage. In scope.
+
+---
+
 ## Code audit, 2026-09-23 — six-subsystem parallel sweep
 
 Six agents read the file in full, one subsystem each, against one rubric:
@@ -639,6 +673,8 @@ each was found and have since shifted.
       - [ ] Clear/downgrade markers when healing crosses thresholds (bloodied ↔
             healthy, dead → alive)
 - [ ] Make marker updates a single helper called from `applyDamage` so V2 can
+      MOVED TO V2 (2026-09-24): the V1 done-definition defers status markers
+      entirely. V1 does not touch `statusmarkers`.
       swap implementations cleanly.
 
 ## Phase 3 — API signature & asset fixes
@@ -721,6 +757,9 @@ each was found and have since shifted.
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
 - [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
+      **V1 BLOCKER (2026-09-24).** The V1 done-definition requires correct damage
+      "including rider damage", so this is no longer a backlog item. It is one of
+      the things that must work before V1 ships.
       Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
       Divine Smite used as a rider, elemental rider damage, a versatile second
       damage type - show in the chat template but are never subtracted from the
