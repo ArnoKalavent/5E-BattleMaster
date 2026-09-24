@@ -25,17 +25,20 @@ A Roll20 Mod (API) script that automates D&D 5E combat. This repo is Matt's fork
   findings needed to rebuild them are recorded in `TODO.md` under the 2026-09-24
   scope decision. Do not reintroduce a button for an action that does not work.
 - **V1 core is two actions resolving correctly end to end** (settled
-  2026-09-24, narrowed same day). Weapon Attack and Direct Spell: right target,
-  right to-hit, right damage from the primary damage roll, with resistances,
-  immunities and vulnerabilities applied. That is the whole of V1 core.
-  Nothing ships as V1 until those two work.
-- **Stretch, in this order, only if core lands early:** rider damage (Sneak
-  Attack, Divine Smite), advantage/disadvantage, crits. Each is a genuine
-  addition rather than a repair, and each is already half-built - the parser
-  extracts `crit1` and `r2` today and every consumer discards them. Extracting
-  a field is not shipping the feature. Pull these in one at a time from the
-  top, and only when core is proven at the table; do not start one because it
-  looks small.
+  2026-09-24, final). Weapon Attack and Direct Spell: right target, right
+  to-hit, right damage - including **rider damage** (Sneak Attack, Divine
+  Smite) - with resistances, immunities and vulnerabilities applied. Nothing
+  ships as V1 until those two work.
+  Riders are core, not polish: a rogue's Sneak Attack is most of a rogue's
+  damage, so a script that silently drops it is reporting the wrong number on
+  most of that player's turns. "Correct damage" has to mean the damage the
+  sheet actually rolled.
+- **Nice to have, in this order, only if core lands early:**
+  advantage/disadvantage, then crits. Both are already half-built - the parser
+  extracts `crit1` and `r2` today and every consumer discards them - which is
+  exactly what makes them look smaller than they are. Extracting a field is not
+  shipping the feature. Take one at a time, and only once core is proven at the
+  table.
 - Status markers stay in V2 regardless of how core goes.
 - **Why V1 was narrowed:** the original V1 was scoped when the team believed
   far more of the upstream script worked than actually does. The 2026-09-23

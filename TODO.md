@@ -89,42 +89,51 @@ new whole-file compile test, which the suite did not previously have.
 
 ---
 
-## V1 done-definition, 2026-09-24 (narrowed same day)
+## V1 done-definition, 2026-09-24 (final)
 
 **V1 core: Weapon Attack and Direct Spell resolve correctly end to end.**
-Right target, right to-hit, right damage from the primary damage roll, with
-resistances, immunities and vulnerabilities applied. That is all of it.
-Nothing ships as V1 until those two work at the table.
+Right target, right to-hit, right damage - **including rider damage** (Sneak
+Attack, Divine Smite) - with resistances, immunities and vulnerabilities
+applied. Nothing ships as V1 until those two work at the table.
 
-### Why this was narrowed within a day of being set
+Riders are core rather than polish because a rogue's Sneak Attack is most of a
+rogue's damage. A script that silently drops it reports the wrong number on most
+of that player's turns, which is worse than not automating damage at all: a
+wrong number gets trusted. "Correct damage" has to mean the damage the sheet
+actually rolled.
 
-The first version of this definition required rider damage as well, and the
-original Phase-era V1 was broader still. Both were written when we believed far
-more of the upstream script worked than it does. The 2026-09-23 audit settled
-that: of five advertised actions, one worked end to end. A scope set against an
-imagined baseline is not worth defending, so it was cut twice in one day - once
-to drop AOE and Movement, once to move riders out of core.
+### Nice to have, in this order, only if core lands early
 
-### Stretch, in this order, only if core lands early
-
-1. **Rider damage** (Sneak Attack, Divine Smite). Parsed and dropped today;
-   `dmg2`/`dmg2type` are commented out in the OGL branch while both callbacks
-   are already written to consume a second damage roll.
-2. **Advantage/disadvantage.** `r2` is parsed into `d20Rolls[1]`; every consumer
+1. **Advantage/disadvantage.** `r2` is parsed into `d20Rolls[1]`; every consumer
    reads `[0]`.
-3. **Crits.** `crit1Index` is extracted and never read; `critRolls`/`critTypes`
+2. **Crits.** `crit1Index` is extracted and never read; `critRolls`/`critTypes`
    are initialised and never populated.
 
-Each is half-built, which makes each look smaller than it is. Pull them in one
-at a time from the top, and only once core is proven live.
+Both are half-built, which is exactly what makes them look smaller than they
+are. Extracting a field is not shipping the feature: crits need the damage
+re-rolled and added, advantage needs a rule for which die wins. Take one at a
+time and only once core is proven live.
 
 **Status markers remain V2** regardless of how core goes.
 
+### How this scope was arrived at
+
+Cut twice on 2026-09-24 and then partly restored, which is worth recording so
+the reasoning is not relitigated. AOE and Movement were removed outright. Riders
+were briefly moved out of core and put back the same day - correctly, on the
+argument above. The underlying cause of the churn: the original V1 was scoped
+when we believed far more of the upstream script worked than it does, and the
+2026-09-23 audit established that of five advertised actions, one worked end to
+end. A scope set against an imagined baseline is not worth defending.
+
 ### The V1 core blocker list
 
-Every one of these is a wrong target, a wrong to-hit or a wrong damage number,
-which is exactly what the definition covers:
+Each is a wrong target, a wrong to-hit or a wrong damage number:
 
+- **Rider damage is parsed and dropped.** `dmg2`/`dmg2type` are commented out in
+  the OGL branch while both callbacks already consume a second damage roll. See
+  the detailed item further down; one `msg.content` capture decides whether this
+  is two lines or a rework of the damage array.
 - `tokenfromlist` assigns a raw Graphic, so every attack after a disambiguation
   prompt is a guaranteed miss. Wrong target.
 - AC is coerced from an unvalidated string: `""` -> always hit, `undefined` ->
@@ -135,6 +144,12 @@ which is exactly what the definition covers:
 - Blank or non-numeric bars corrupt silently: `"" >= 0` is true so a token with
   no temp-HP bar takes the temp-HP path, and non-numeric bar text writes `NaN`
   persistently. Wrong damage.
+- **Sheet type has no default case.** `applyDamage` switches on
+  `state.sCharacterSheetType` with cases for only `"OGL"` and `"Shaped"` and no
+  `default`, so any other value reads neither attribute set and ALL resistance,
+  immunity and vulnerability handling is silently skipped. `SheetConfig` accepts
+  any string with no validation and persists it, so one typo disables the lot.
+  Found 2026-09-24 by the new applyDamage tests; pinned as a labelled DEFECT.
 - Resistances/immunities/vulnerabilities landed in 2276a51 but have never been
   confirmed live. Gate 4.
 
@@ -774,9 +789,9 @@ each was found and have since shifted.
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
 - [ ] **Second damage component is parsed and dropped on the 2014 sheet.**
-      **V1 STRETCH (2026-09-24, revised).** Briefly classified a V1 blocker; moved
-      to stretch the same day when V1 core was narrowed to the primary damage
-      roll only. Take it first if core lands early - it is the top stretch item.
+      **V1 CORE BLOCKER (2026-09-24, final).** Briefly moved to stretch and put
+      back the same day: a rogue's Sneak Attack is most of a rogue's damage, so
+      dropping it silently reports the wrong number on most of that player's turns.
       Found live 2026-09-24. Riders that add damage to a hit - Sneak Attack,
       Divine Smite used as a rider, elemental rider damage, a versatile second
       damage type - show in the chat template but are never subtracted from the
