@@ -364,7 +364,19 @@ with real objects.
 >
 > **Gate 2 — Phase 1 exit criterion.** PC turn, NPC turn, custom tracker entry
 > present (nobody is prompted - silence is correct, it waits for the GM to
-> advance), weapon attack, cone AOE, line AOE.
+> advance), weapon attack, direct spell.
+>
+> Revised 2026-09-24: the original criterion ended "weapon attack, cone AOE,
+> line AOE". Those actions no longer exist - see the scope decision at the top
+> of this file. A direct spell replaces them, and it should include one
+> single-target SAVE spell, because the saving-throw queue survived the AOE
+> removal and its only remaining producer is `DirectSpellRollCallback`.
+>
+> **Gate 2a — action surface (added 2026-09-24, PASSED same day).** The turn
+> prompt offers exactly two buttons, Weapon Attack and Direct Spell. Clicking a
+> stale `!combat aoespell`, `!combat move` or direction button from earlier in
+> the chat log answers with the unknown-command whisper instead of failing
+> silently.
 >
 > **Gate 3 — roll handling (0829f8a).** This exercises the crash that took the
 > sandbox down on 2026-09-21.
@@ -432,6 +444,41 @@ with real objects.
 - [x] **Fix `bar1_val` typo** in `ResetTokenTurnValues` (`bar1_value`);
       also switched a stray global reference to the function's own parameter.
       Tested (3 cases, same file).
+
+### Live smoke-test findings, 2026-09-24
+
+**Gate 0 (build identity) and Gate 2a (action surface): PASSED.** Confirmed by
+Matt in a live game against `dist/` at v0.3.0-dev (1a34141): two buttons only,
+and stale AOE/move/direction buttons from the pre-removal chat history answer
+with the unknown-command whisper. The `default:` arm is doing its job.
+
+**First paste failed, and it was not a code defect.** The sandbox reported
+`SyntaxError: Unexpected end of input` at `battlemaster-test.js [Tab 3]:150`.
+Reproduced exactly by truncating `dist/` to its first 150 lines: the paste was
+cut off at 7,329 of 52,914 bytes. The file on disk parsed clean throughout.
+
+Verification checks for any future paste, cheapest first: the last line must be
+`});`; the file is 1053 lines / 52,914 bytes; the banner must read the rev you
+just built.
+
+**Multi-tab hazard, worth remembering.** The script opens
+`var BattleMaster = BattleMaster || (function(){`. If an older copy exists in a
+script tab that loads first, the `||` short-circuits and the new script is
+skipped entirely and silently - while `on('ready')`, which sits outside the
+IIFE, still runs and registers the OLD object's handlers. The startup banner is
+the only discriminator: a rev other than the one just built means a stale copy
+in another tab won, and the fix is deleting that tab, not re-pasting.
+
+**Test environment caveat.** This run had several Mods loaded (kScaffold, a
+Kingmaker module) and Roll20 warned that multiple character sheets are in use.
+Gate 0 asks for one sheet and BattleMaster as the only Mod. Gates 0 and 2a are
+insensitive to that, but Gate 3 onward are not - GroupInitiative in particular
+writes to the turn order this script watches.
+
+**Still outstanding for Phase 1:** Gates 2 (full turn cycle incl. a direct
+spell with a save), 3, 4, 5 and 6.
+
+---
 
 ### Live smoke-test findings, 2026-09-21
 
