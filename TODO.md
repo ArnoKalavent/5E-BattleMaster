@@ -528,11 +528,17 @@ each was found and have since shifted.
       the script was legitimately waiting on, and the turn is dead with no
       message. Fix: only splice when the index is >= 0. Related to, but
       distinct from, the Phase 5 roll-interception guard item.
-- [ ] **`findTokenAtTarget` fails silently** (lines 407-409). The `else` branch
+- [x] **`findTokenAtTarget` fails silently** (lines 407-409). The `else` branch
+      DONE 9ba2c37 (verified 2026-09-24): both failure paths now set `target =`
+      `undefined`, whisper the caller, and log the tested entry count and reticle
+      coordinates. Superseded text below kept for the original description.
       taken when the reticle token cannot be resolved is completely empty — no
       whisper, no log — so a failed target resolution is indistinguishable from
       nothing happening. Fix: log and whisper the player.
 - [ ] **Targeting is scoped to the turn order** (line 371). `findTokenAtTarget`
+      PARTIAL (2026-09-24): the silent-failure half is fixed by 9ba2c37 - the
+      caller is now told "Only combatants in the turn tracker can be targeted."
+      The scoping itself is unchanged and still open.
       only considers tokens present in `Campaign().get('turnorder')`, so
       anything not in the tracker cannot be targeted and the failure is silent
       (see above). Decide whether this is intended (encounter participants
@@ -615,10 +621,14 @@ each was found and have since shifted.
 
 - [ ] **Namespace all state** under `state.BattleMaster = {...}` per current API
       best practice (root-level keys risk cross-script collisions).
-- [ ] **Fix config truthiness bug** — DMP toggle stored string `"false"` (truthy).
+- [x] **Fix config truthiness bug** — DMP toggle stored string `"false"` (truthy).
+      MOOT 76d666b (verified 2026-09-24): DeathMarkersPlus is gone, so the toggle
+      no longer exists. The lesson stands for future config handling.
       Becomes moot once DMP is removed, but apply the lesson: store booleans as
       booleans in all config handling.
-- [ ] **Remove DeathMarkersPlus entirely** (script no longer exists):
+- [x] **Remove DeathMarkersPlus entirely** (script no longer exists):
+      DONE 76d666b (verified 2026-09-24): 0 references to deathmarker/DMPConfig/
+      bDeathMarkersPlusInstalled remain in the script.
       - [ ] Delete `Deathmarkers.UpdateDeathMarkers()` calls, the
             `bDeathMarkersPlusInstalled` state key, and the `DMPConfig` config path
       - [ ] Replace with native Roll20 status markers via
@@ -692,9 +702,14 @@ each was found and have since shifted.
             and document?).
 - [ ] **Remove Shaped sheet mode** — delete Shaped branches from `rollData`,
       `applyDamage`, save-DC handling, and the SheetConfig options.
-- [ ] Fix latent `IsWithinRange` bug (`=` vs `===` on empty-string check) before
+- [x] Fix latent `IsWithinRange` bug (`=` vs `===` on empty-string check) before
+      DONE 13d2710 (verified 2026-09-24): the function was deleted outright with the
+      AOE removal. It was never called and had three bugs in eight lines.
       wiring up range enforcement (planned feature).
-- [ ] Replace fragile `indexOf`/`substring` template parsing with a small
+- [x] Replace fragile `indexOf`/`substring` template parsing with a small
+      DONE 2276a51 (verified 2026-09-24): `extractTemplateText` and
+      `extractInlineRollIndex` are used at 13 sites; no raw `indexOf('{{')` parsing
+      remains.
       regex-based field extractor (single place to maintain field names).
 
 ## Phase 5 — Modernization & hardening (post-V1 polish)
