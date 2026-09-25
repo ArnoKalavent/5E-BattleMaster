@@ -1,234 +1,331 @@
 # 5E BattleMaster
 
-A Roll20 Mod (API) script that automates D&D 5th Edition combat: turn-by-turn
-action prompts, automated attack resolution, damage application with
-resistances, and geometric AOE targeting.
+A Roll20 Mod (API) script that automates part of D&D 5th Edition combat: turn
+prompts from the Turn Tracker, target selection with an on-map reticle, attack
+resolution, and damage application with resistances and temporary HP.
 
-> **Fork status:** This is a maintained fork of
-> [posadist-revolution/5E-BattleMaster](https://github.com/posadist-revolution/5E-BattleMaster)
-> (original author: Sarah Hunicke-Smith), currently being modernized for
-> today's Roll20 Mod (API) and the **D&D 5E by Roll20 (2014)** character sheet.
-> See `TODO.md` for the roadmap and Known Issues below for the current state.
+> **Project status: paused, 2026-09-25.** This fork is not abandoned code — it
+> is in a deliberately clean, documented state, and everything below is
+> accurate as of the final commit. It stopped for a reason worth reading
+> before you fork it yourself; see [Why this stopped](#why-this-stopped).
 
-## Supported Configuration
-
-| | Status |
-|---|---|
-| **D&D 5E by Roll20 (2014)** sheet (formerly "5th Edition OGL") | ✅ Supported target |
-| 5e Shaped sheet | ⚠️ Legacy code paths exist but are **unsupported and slated for removal** (the sheet is abandoned and unavailable for new games) |
-| **D&D 2024 by Roll20** (Beacon) sheet | ❌ Not supported. Beacon sheets use a different attribute system (async `getSheetItem`) and different roll output; support is a possible future track |
-| DeathMarkersPlus integration | ❌ Being removed — the script no longer exists. Dead/bloodied indicators will use Roll20's built-in status markers |
-
-**API server:** This script runs on the **Default** Mod (API) sandbox. The
-*Experimental* server is only needed for Beacon-sheet functions, which this
-script does not use. If 2024-sheet support is added later, that mode will
-require the Experimental server and will be documented separately.
-
-## Current Functionality
-
-1. Turn-based action prompts driven by the Turn Tracker: on each combatant's
-   turn, the controlling player is whispered buttons for **Weapon Attack**,
-   **Direct Spell**, **AOE Spell**, and **Move**.
-2. Attack rolls, saving throws, and damage application for:
-   - Direct weapon attacks
-   - Direct spell attacks (attack-roll and saving-throw spells)
-   - Self-origin AOE spells (cones, lines, spheres)
-3. Damage application honors NPC immunities/resistances/vulnerabilities,
-   consumes temporary HP first, and updates token bars automatically.
+This is a fork of
+[posadist-revolution/5E-BattleMaster](https://github.com/posadist-revolution/5E-BattleMaster)
+(original author: Sarah Hunicke-Smith), modernized for the current Roll20 Mod
+API and the **D&D 5e OGL by Roll20** character sheet.
 
 ---
 
-# Setup & Requirements
+## Why this stopped
 
-BattleMaster makes a number of assumptions about how your game is configured.
-If any of these aren't met, the script will fail silently or crash mid-combat,
-so read this section before your first combat.
+The original goal was full combat automation. That goal is not reachable, and
+the reason is structural rather than a matter of remaining effort.
 
-## Prerequisites
+**5e's reaction economy is fundamentally interruptive, and this script — like
+any script driven by one player's roll at a time — resolves a turn linearly.**
 
-- A **Roll20 Pro** subscription (required for any Mod script).
-- The **D&D 5E by Roll20 (2014)** character sheet, applied to every combatant.
+- **Shield** changes a target's AC *after* they see the attack roll.
+- **Cutting Words** reduces an attack roll *after* it is made, by a third
+  party who is not the active player.
+- Any number of abilities in any number of books do something similar, and
+  the list only grows.
 
-## One-Time Script Configuration
+The script resolves an attack in a single pass: the roll arrives, hit or miss
+is computed, damage is applied. There is no point at which another player can
+intervene. Adding one requires splitting attack resolution into stages — which
+is tractable, and was planned — but the deeper problem is that the set of
+interrupts is unbounded and cannot be enumerated in advance.
 
-1. Install `5ebattlemaster.js` in your game's Mod (API) sandbox (Default
-   server).
-2. In chat, run `!combat config` (as GM) and set **Character Sheet** to `OGL`.
-   > ⚠️ The script currently **defaults to Shaped**. Until that default is
-   > changed, skipping this step means every roll is misparsed.
-3. **Do not touch the DeathMarkersPlus config option.** The DeathMarkersPlus
-   script no longer exists, and due to a config bug, setting the toggle to
-   *either* value enables the integration and will crash the script on the
-   first damage application. The fresh-install default is the only safe state.
-   (This integration is being removed entirely; see `TODO.md` Phase 2.)
-4. **Replace the reticle image.** Targeted attacks spawn a reticle token using
-   an image URL hard-coded in `promptTarget()`. Roll20's API only permits
-   `createObj` images from *your own* library — as your own-library **thumb**
-   URL including its query string. Upload any small reticle PNG to your Roll20
-   library, copy its thumb URL, and replace the `imgsrc` value in
-   `promptTarget()`.
+**The sharper version of the argument:** a script that is *usually* right is
+more dangerous than no script, because people stop checking it. If a Shield is
+ignored and 30 damage lands on a wizard who should have taken none, and nobody
+notices because the script said so, that is worse than doing the arithmetic by
+hand.
 
-Settings persist between sessions via the Roll20 `state` object.
+### What we would have built instead
 
-## Token Setup (every combatant)
+The design that dissolves this is not to model every interrupt. It is to make
+the script **correctable**: an `!combat undo` that reverses the last damage
+application. One bounded feature absorbs an unbounded problem space — Shield,
+Cutting Words, a misread AC, a forgotten Bless, and every ability nobody has
+thought of yet. The script already records exactly what it wrote to which bar.
 
-Each token in combat must:
+If you fork this, build that first. It is recorded in `TODO.md`.
 
-1. **Represent a character.** Link the token to a character sheet
-   ("Represents Character" in token settings). AC, resistances, and player
-   control are all read from the linked sheet; unlinked tokens crash the turn
-   handler.
-2. **Use the following bar layout** (hard-coded):
+### What is worth salvaging
 
-   | Bar | Value | Max |
-   |-----|-------|-----|
-   | Bar 1 (green) | Remaining movement speed (ft) | Total movement speed (ft) |
-   | Bar 2 (blue)  | Temporary HP | — |
-   | Bar 3 (red)   | **Current HP** | Max HP |
+If your goal is narrower — *"stop me doing HP and resistance arithmetic for
+eight monsters while six players talk at me"* — that is achievable, and it is
+most of what works here today.
 
-   All damage is applied to **Bar 3**. Temporary HP in Bar 2 is consumed
-   first. Bar 1 is reset to its max each turn, but nothing *decrements* it
-   yet — movement tracking is unimplemented (see Move above).
-3. **Have a name** — used in whispers and target-disambiguation prompts.
-4. **Be in the Turn Tracker** before combat starts (see below).
+---
 
-## Character Sheet Setup
+## What it actually does
 
-- **Attack and spell rolls must include their damage in the same chat
-  message.** The script doesn't roll for players — it parses the roll template
-  of the next roll the prompted player makes. Enable **Auto Roll Damage &
-  Crit** in the sheet settings, or hits will apply no damage.
-- The parser reads the sheet's standard roll templates (`atkdmg` / `dmg` for
-  PCs, `npcatk` / `npcaction` for NPCs) via the fields `r1`, `r2`, `dmg1`,
-  `dmg1type`, `crit1`, `savedc`, `saveattr`, `savedesc`, and `range`. Stock
-  sheet rolls emit these automatically; custom macros must too.
-- **Save-for-half spells:** the spell's save description (`savedesc`) must
-  contain the phrase "half damage" (case and spacing ignored). Any other
-  wording is treated as save-negates.
-- **NPC damage immunities / resistances / vulnerabilities** are read from
-  `npc_immunities`, `npc_resistances`, and `npc_vulnerabilities` —
-  compendium-dragged NPCs populate these. Matching is a case-insensitive
-  substring match, so list plain damage types (e.g. `fire, poison`).
-  *PC-side resistances are not currently supported* — the 2014 sheet has no
-  structured PC resistance attribute (see `TODO.md`, open questions).
-- **NPC armor class** lives in `npc_ac`. ⚠️ *Known issue:* the script
-  currently queries the long-removed `npcd_ac` attribute and falls back to
-  `ac`, which for NPCs yields a wrong, Dex-derived value. Fix scheduled in
-  Phase 4; until it lands, NPC AC comparisons are unreliable.
+Honest scope. Everything in this list was verified by unit tests, and most of
+it by live play.
 
-## Map & Page Setup
+1. **Turn prompts.** When the Turn Tracker rotates, the controlling player is
+   whispered a two-button menu: **Weapon Attack** and **Direct Spell**.
+2. **Targeting.** An on-map reticle token is spawned; the player drags it over
+   a target and confirms. Ambiguous overlaps prompt a token list.
+3. **Attack resolution.** The script waits for the player's next roll from
+   their character sheet, parses the roll template, and compares the attack
+   roll to the target's AC.
+4. **Damage application**, which is the part that works best:
+   - primary damage, secondary damage, **rider damage** (Sneak Attack, Divine
+     Smite, Dueling Style) and **higher-level spell damage**
+   - NPC immunities, resistances and vulnerabilities, correctly rounded
+     *down* per 5e
+   - temporary HP consumed before HP
+   - refuses to write to a token whose HP bar is missing or non-numeric,
+     and tells the GM instead
+5. **Saving throws.** Single-target save spells whisper the defender, wait for
+   their save, and adjudicate it.
+6. **Escape hatch.** `!combat cancel` clears a prompt you cannot satisfy.
 
-- Run combat on the page with the **player ribbon** — the reticle, spell FX,
-  and all distance math use `playerpageid`.
-- Distance math assumes Roll20's default **70 px grid cell** and converts to
-  feet using the page's *Scale* setting. Non-default cell sizes or gridless
-  maps will miscalculate cones and spheres.
+### What it does not do
 
-## Turn Tracker
+| | |
+|---|---|
+| **Reactions and interrupts** | Shield, Cutting Words, etc. See above. This is why the project stopped. |
+| **Multiple attacks per turn** | The menu is offered once per turn. Extra Attack, Action Surge and haste are not handled. Workaround: `!combat cancel` re-offers the menu. |
+| **AOE spells** | Removed 2026-09-24. Cones and lines never adjudicated a save, cube was an empty function, cylinder was a miscopied sphere. |
+| **Movement** | Removed 2026-09-24. Never implemented upstream — the button existed and did nothing. |
+| **Critical hits** | Parsed from the roll and deliberately discarded. |
+| **Advantage / disadvantage** | Both dice are parsed; only the first is read. |
+| **Status markers** | Nothing marks dead, unconscious or bloodied. |
+| **PC resistances** | Only NPC resistance attributes are read. |
+| **NPC attacks** | **Unverified.** The parser never checks which roll template it received — it greps for `dmg1`, `r1` and similar field names. Whether NPC action templates use those names was never confirmed. If they do not, monster attacks have never worked. |
 
-- Add **all** combatants (PCs and NPCs) to the Turn Tracker during the
-  `!combat roll initiative` staging phase, then run `!combat begin`. The
-  script:
-  - prompts the top combatant when the tracker **rotates** (adding entries
-    mid-combat — summons, reinforcements — never fires a premature prompt;
-    the newcomer is prompted when their slot reaches the top),
-  - only considers tokens **in the turn order** as valid attack targets,
-  - safely ignores custom (non-token) entries like round counters, wherever
-    they sit. If a custom entry is in the top slot, it's nobody's turn until
-    the GM advances past it.
-  - Tokens deleted mid-combat are skipped gracefully.
-- Each character's **Can Be Edited & Controlled By** field determines who is
-  whispered prompts and saving-throw requests, preferring whoever can act:
-  an **online** listed player first, then an **online** listed GM (so a GM
-  co-listed on a PC automatically takes over when the player is absent),
-  then an offline listed player (the whisper lands in their archive), then
-  the GM. Characters with no controller at all (typical NPCs) route to the
-  GM. Unlinked tokens are skipped with a GM whisper explaining the fix.
+---
 
-## AOE Spells
+## Requirements
 
-Set the spell's **range** field to: `[Self] [Cone|Line|Sphere] [size in feet]`
-— e.g. Burning Hands → `Self Cone 15`.
+- **Roll20 Pro** (required for any Mod script).
+- **D&D 5e OGL by Roll20** character sheet on every combatant.
+  This is *not* the same sheet as "D&D 5E by Roll20", which emits
+  `weapondamage` rather than `dmg1`/`globaldamage` and is **not supported**.
+  D&D 2024 / Beacon is not supported either.
+- The **Default** Mod sandbox. The Experimental server is not needed.
+- Deploy `dist/5ebattlemaster.js`, not the source file — see
+  [Building](#building).
 
-Current limitations:
+---
 
-- Only **self-origin** AOEs work; point-targeted spells (e.g. Fireball) are
-  not yet handled. `Cube` and `Cylinder` are recognized but not implemented.
-  Cones, lines, and spheres all work.
-- Cone/line direction is chosen from 8 compass-point buttons.
-- Save DCs and damage come from the caster's roll; each affected token's
-  controller is whispered a saving-throw request, and the script consumes
-  their **next** roll as the save.
+## Setup
 
-## Known Issues / Gotchas
+### 1. Install and check the banner
 
-Tracked in detail in `TODO.md`. Summary of what bites hardest today:
+Paste `dist/5ebattlemaster.js` into your game's Mod sandbox. On startup the
+API console must print:
 
-- **Move does nothing** — the action button is an unimplemented stub.
-- **Stacked tokens break targeting**: when the reticle covers multiple
-  tokens, the "which token?" disambiguation prompt dead-ends — clicking a
-  name records the choice but never resumes the attack. Avoid overlapping
-  targets for now; re-click the action button if you hit it.
-- **Targeting candidates accumulate**: an internal list is never cleared
-  between attacks, so repeated targeting in one session can surface phantom
-  disambiguation prompts.
-- NPC AC is read from a removed attribute (`npcd_ac`); comparisons
-  unreliable for NPCs (Phase 4).
-- The DeathMarkersPlus config toggle must not be touched (Phase 2 removes it).
-- The script consumes the *next* inline roll from a prompted player — avoid
-  unrelated rolls (checks, initiative) while a BattleMaster prompt is
-  pending.
-- Advantage/disadvantage is not resolved — only the first d20 result is used.
-- `spawnFx` calls pass a page object where the current API wants a page ID
-  string (Phase 3).
+```
+-=> BattleMaster v0.3.0-dev (<rev>) <=- [timestamp]
+```
 
-## Planned Functionality
+If the rev is not the build you just pasted, you are running a stale copy.
+If the console shows `SyntaxError: Unexpected end of input`, your paste was
+**truncated** — the file is ~1000 lines and must end with `});`.
 
-See `TODO.md` for the full phased roadmap. Highlights:
+> **Multi-tab hazard.** The script opens with
+> `var BattleMaster = BattleMaster || (function(){`. If an older copy exists in
+> a script tab that loads first, the `||` short-circuits and the new script is
+> silently skipped, while the startup handler still registers the *old*
+> version's behaviour. The banner is the only way to tell. If it reports a rev
+> you do not recognise, delete the other tab rather than re-pasting.
 
-1. Native dead/bloodied status markers (replacing DeathMarkersPlus), with a
-   V2 extension path for custom markers.
-2. Weapon/spell range enforcement and movement limits from Bar 1.
-3. Point-targeted AOEs (Fireball et al.), Cube and Cylinder shapes.
-4. Proper advantage/disadvantage handling using `r1`/`r2`.
-5. Class-specific combat actions.
-6. (Future track) D&D 2024 / Beacon sheet support via `getSheetItem` on the
-   Experimental API server.
+### 2. Configure the reticle
 
-# Changelog
+Targeting spawns a reticle token, and Roll20 only permits `createObj` images
+from **your own library**.
 
-## Fork — unreleased
+1. Upload any small image to your Roll20 library and drag it onto the page.
+2. Select that token and run `!combat set reticle` (GM only).
+3. The token can then be deleted.
 
-- Documentation overhaul: setup requirements, supported-sheet policy
-  (2014-only), known-issues list, phased roadmap (`TODO.md`)
-- Repo restructure: flattened versioned folders; added test infrastructure
-  (`npm test`, 83 unit cases across 5 suites)
-- Fixed: controller resolution rewritten (online-aware preference order,
-  GM takeover for absent players, GM fallback for NPCs, stale-ID filtering)
-- Fixed: turn-order handling — custom entries (round counters), deleted
-  tokens, and unlinked tokens are handled gracefully at all three consumer
-  sites instead of crashing
-- Fixed: line-shaped AOEs (argument-order bug meant they never worked)
-- Fixed: remaining movement reset (`bar1_value` typo)
-- New: three-phase combat flow (`!combat roll initiative` / `begin round N` /
-  `end`) — initiative rolls no longer trigger spurious turn prompts; turn
-  listener guards against additions and re-sorts; `end` clears pending roll
-  interception
-- New: `!combat reticleconfig` — targeting reticle image is configured from
-  a selected token (or URL) and stored in namespaced state; reticle failures
-  whisper instructions instead of crashing the API sandbox
-- Fixed: `sendPing` call updated to the current API signature
+Alternatively `!combat set reticle <url>` with a library **thumb** URL,
+including its query string.
 
-## V0.2 (upstream)
+### 3. Token setup
 
-- Added a bunch of objects to clarify code
-- Added compatibility with DeathMarkersPlus to check for dead or bloodied
-  tokens
-- Removed deadname
-- Added compatibility with 5e Shaped Sheet
-- Added Temporary HP as token bar 2
+Every combatant token must:
 
-## V0.1 (upstream)
+- **Represent a character.** AC, resistances and player control are read from
+  the linked sheet.
+- **Use this bar layout** (hard-coded):
 
-- Initial release: attack rolls, saving throws, and damage for direct weapon
-  attacks, direct spell attacks, and AOE spell attacks
+  | Bar | Value |
+  |---|---|
+  | Bar 1 | *unused* — movement was removed |
+  | Bar 2 (blue) | Temporary HP |
+  | Bar 3 (red) | **Current HP** |
+
+  Damage applies to **Bar 3**; temporary HP in Bar 2 is consumed first. A
+  blank Bar 2 means "no temporary HP" and is fine. A blank or non-numeric
+  **Bar 3** causes the script to refuse the damage and whisper the GM.
+- **Have a name**, used in whispers and disambiguation prompts.
+- **Be in the Turn Tracker** before `!combat begin`.
+
+### 4. Character sheet setup
+
+- **Enable "Auto Roll Damage & Crit"** in the sheet settings. The script does
+  not roll — it parses the next roll the prompted player makes, and needs the
+  damage in the same message.
+- **Save-for-half spells:** the save description must contain the phrase
+  "half damage" (case and spacing ignored). Other wording is treated as
+  save-negates.
+- **NPC resistances** come from `npc_immunities`, `npc_resistances` and
+  `npc_vulnerabilities`. Compendium NPCs populate these. Matching is
+  case-insensitive substring, so list plain damage types (`fire, poison`).
+
+### 5. Map and page
+
+Run combat on the page holding the **player ribbon**. The reticle and all
+distance maths resolve the page as `playerpageid`.
+
+---
+
+## Commands
+
+| Command | Who | What |
+|---|---|---|
+| `!combat roll initiative` | GM | Staging phase — tracker changes are ignored while initiative is gathered |
+| `!combat begin round 1` | GM | Go live; refuses if the tracker is empty |
+| `!combat end` | GM | Full teardown, including pending roll queues |
+| `!combat cancel` | anyone | Clear your own pending prompt and re-offer the action menu |
+| `!combat cancel all` | GM | Clear everyone's |
+| `!combat set reticle [url]` | GM | Configure the reticle image |
+
+`!combat start` / `!combat stop` remain as legacy aliases, as does
+`!combat reticleconfig`. Anything unrecognised answers with a usage whisper
+rather than failing silently.
+
+---
+
+## Known bugs
+
+Verified against the final commit. Full detail, with line numbers and
+reproduction, is in `TODO.md`.
+
+**Wrong result, no error:**
+
+1. **Disambiguation targeting always misses.** When two tokens overlap under
+   the reticle, choosing from the prompt assigns a raw Graphic where a wrapper
+   is expected, so `target.ac` is `undefined`, `undefined <= roll` is false,
+   and the attack is a guaranteed miss. The action also fires *before* the
+   choice is made, against the previous target.
+2. **NPC AC is read from the wrong attribute.** The script queries `npcd_ac`,
+   removed from the sheet around 2017, then falls back to the PC-side `ac`
+   field. The value is also never validated as a number: `""` coerces to 0 and
+   always hits, `"15 (natural armor)"` gives `NaN` and never hits.
+3. **Multiple attacks per turn are ignored** (see table above).
+4. **Roll dispatch finds the oldest expectation for a player**, so a player
+   owing two rolls can have one adjudicated as the other.
+5. **Targeting is limited to tokens in the Turn Tracker.** Anything else
+   cannot be targeted; the script now says so rather than failing silently.
+
+**Unresolved:**
+
+6. **Roll interception does not fire for a GM proxying an offline player.**
+   Reproduced live, cause unknown. `findWhoIsControlling` was ruled out by
+   direct execution.
+
+**Unverified:**
+
+7. **NPC attack templates** (see table above). One captured `msg.content` from
+   a monster attack would settle it.
+8. **`hldmg`** (higher-level spell damage) is implemented from the sheet's
+   documented field list and confirmed by no live capture.
+
+---
+
+## Building
+
+```
+npm install      # dev dependencies only; the script itself has none
+npm test         # 1137 assertions
+npm run build    # writes dist/5ebattlemaster.js with the git rev stamped in
+```
+
+The source keeps `buildRev = 'dev (unstamped)'`; only `npm run build` fills it
+from `git describe`. **Always deploy `dist/`.** A build stamped `dev
+(unstamped)` means somebody pasted the source file, which is how a stale build
+goes unnoticed.
+
+---
+
+## For anyone picking this up
+
+The genuinely reusable work here is not the combat automation. It is the
+tooling built to make an old, untested script safe to change.
+
+- **`TODO.md` is the real documentation.** It contains a six-subsystem code
+  audit, the full roll-template field mapping with two captured real messages,
+  every design decision with its reasoning, and every open bug with a
+  reproduction. Read it before the source.
+- **`tests/support/roll20.js`** is a fake Roll20 environment that loads the
+  real script through `vm.runInNewContext` and hands back inspectable token and
+  character objects. Before it existed, the suite stubbed `applyDamage`,
+  `TurnChange` and `getAttrByName` — and *every* sandbox-killing crash found
+  during this work lived in exactly that blind spot.
+- **`tests/compiles.test.js`** parses both the source and `dist/`. The file is
+  one IIFE whose members are a comma-separated expression list, so a stray
+  comma is a syntax error, and in the Roll20 sandbox a syntax error means the
+  script never loads and the table's Mods are dead. That check runs first.
+- **Defect pinning.** Tests that record known-wrong behaviour are named
+  `DEFECT ...` with the correct value in a comment. Fixing the bug then flips a
+  labelled assertion instead of appearing to break the suite. Six unlabelled
+  pins were found during the audit and were actively misleading.
+- **`tools/review-status.js`** compares a digest of the git *index* against
+  what a reviewer was actually shown, because on one occasion review findings
+  were hand-fixed and committed without re-review, and nothing caught it.
+
+### Lessons that cost the most to learn
+
+- **Waiting for one captured message beat guessing.** Rider damage looked like
+  it belonged in `dmg2`. It does not — it arrives in `globaldamage`, and
+  `dmg2` is present as a literal `0`. Uncommenting the "obvious" two lines
+  would have changed nothing visible and shipped as a fix.
+- **`globaldamagetype` is free text.** It has been observed as a real damage
+  type, as a label (`Sneak`), and as blank. Sneak Attack damage is the
+  weapon's type, so typing it `sneak` would let it bypass piercing resistance —
+  a wrong number in the opposite direction from the bug being fixed.
+- **Deletion was the highest-value change available.** The script went from
+  1509 lines to ~1000. Everything removed was broken, unreachable, or a button
+  that did nothing.
+
+---
+
+## Changelog
+
+### Fork — v0.3.0-dev
+
+**Scope decisions:** AOE spells and Movement removed entirely; Shaped sheet
+support and the whole sheet-type concept removed, leaving the script
+unconditionally OGL; other sheets are a fork, not a branch; crits, advantage
+and status markers deferred.
+
+**Correctness:** rider and higher-level damage now applied; resistance rounds
+down per 5e; empty damage types no longer match every immunity; blank and
+non-numeric token bars no longer corrupt silently; nine unguarded callback
+paths that could disable the sandbox for the whole table were closed;
+DeathMarkersPlus removed, including a config bug that armed it permanently.
+
+**Reliability:** whole-file compile check, real Roll20 test harness, build-rev
+stamping, review-freshness gate. Assertions grew from zero to 1137.
+
+**Fixed upstream defects:** initiative prompt spam, turn-order handling for
+custom and deleted entries, controller resolution, roll-expectation
+desynchronisation, targeting failures that silently reused the previous
+target, and a damage-parsing path that crashed the sandbox.
+
+### V0.2 / V0.1 (upstream)
+
+See the original repository.
+
+---
+
+## Licence
+
+Inherited from the upstream project.

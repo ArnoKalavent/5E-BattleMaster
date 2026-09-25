@@ -622,6 +622,31 @@ each was found and have since shifted.
       only BattleMaster loaded and capture the
       `This character is controlled by player <name>` log line.
 
+- [ ] **Multi-attack turns do nothing after the first action.** Found live
+      2026-09-24; recorded at project close, having previously existed only in
+      conversation.
+
+      The "Select an action" menu is offered in exactly two places:
+      `TurnChange` (once, when the turn begins) and `CancelPendingRolls` (as a
+      re-prompt after cancelling). `WeaponAttackRollCallback` applies damage and
+      returns; nothing re-prompts. The script therefore models ONE action per
+      turn. A level-11 fighter with Extra Attack, an Action Surge or a haste
+      round gets one attack automated and the rest ignored - rolling again from
+      the sheet does nothing, because no expectation is armed to catch it.
+
+      Vestigial scaffolding exists and was never wired up: `bHasTakenAction`,
+      `bHasTakenBonusAction` and `bHasTakenReaction` are set on every
+      tokenWrapper and never read or written.
+
+      **Workaround that works today:** `!combat cancel` re-offers the action
+      menu, so cancelling and re-picking yields a second attack.
+
+      **Proposed minimal fix, about two lines:** re-offer the action menu after
+      any resolved action, hit or miss, and let the player decide when they are
+      done. Do not count attacks - 5e attack counts depend on class, level,
+      Action Surge, haste and Flurry of Blows, so a script that enforces a limit
+      will be wrong for exactly the high-level table that needs it.
+
 - [ ] **Sequential attack flow: roll to hit, adjudicate, THEN roll damage**
       (design decided 2026-09-21). The script currently assumes the attack and
       damage arrive in ONE message, which the 2014 sheet only does when its
@@ -768,7 +793,9 @@ each was found and have since shifted.
             no structured PC-side damage-resistance attribute — decide how (or
             whether) to support PC resistances (custom attribute? config? skip
             and document?).
-- [ ] **Remove Shaped sheet mode** — delete Shaped branches from `rollData`,
+- [x] **Remove Shaped sheet mode** — delete Shaped branches from `rollData`,
+      DONE a03a403 (2026-09-24): removed entirely, along with the whole
+      sheet-type concept. Zero references remain.
       `applyDamage`, save-DC handling, and the SheetConfig options.
 - [x] Fix latent `IsWithinRange` bug (`=` vs `===` on empty-string check) before
       DONE 13d2710 (verified 2026-09-24): the function was deleted outright with the
@@ -788,7 +815,10 @@ each was found and have since shifted.
       inline rolls from a prompted player aren't swallowed
 - [ ] Advantage/disadvantage: use `r1`/`r2` correctly instead of first-roll-only
 - [ ] `sendChat` prompts with `{noarchive: true}` to stop clogging chat history
-- [ ] **Rider damage arrives as `globaldamage`, not `dmg2`.**
+- [x] **Rider damage arrives as `globaldamage`, not `dmg2`.**
+      DONE 38526a1 (2026-09-24): globaldamage, globaldamagetype, hldmg and
+      dmg2 are all parsed, and both callbacks apply every non-zero entry.
+      hldmg is implemented from documentation and unconfirmed by capture.
       **V1 CORE BLOCKER. Question settled 2026-09-24 by a live capture.**
 
       A Sneak Attack from the 2014 sheet was captured in full. The rider does
